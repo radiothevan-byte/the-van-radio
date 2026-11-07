@@ -765,21 +765,43 @@ function AboutView() {
   );
 }
 
-function MiniPlayer({ journey, isPlaying, isLive, onToggle, onNext, onPrev, progress, duration, onSeek, onClose }) {
+// Podcast-style "10 seconds" icon (circular arrow + 10). Used only by the
+// recorded-Journey player; Live Radio never renders it.
+function SkipTenIcon({ forward }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <g transform={forward ? "translate(24 0) scale(-1 1)" : undefined}>
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+        <path d="M3 3v5h5" />
+      </g>
+      <text x="12" y="15.4" textAnchor="middle" fontSize="8.2" fontWeight="700" fontFamily="Inter, sans-serif" fill="currentColor" stroke="none">10</text>
+    </svg>
+  );
+}
+
+function MiniPlayer({ journey, isPlaying, isLive, onToggle, onNext, onPrev, onSkip, progress, duration, onSeek, onClose }) {
   if (!journey) return null;
   const pct = duration ? (progress / duration) * 100 : 0;
   return (
     <div className="mini-player">
       {!isLive && (
-        <input
-          className="mini-seek"
-          type="range"
-          min={0}
-          max={duration || 0}
-          value={Math.min(progress, duration || 0)}
-          onChange={(e) => onSeek(Number(e.target.value))}
-          style={{ "--pct": `${pct}%` }}
-        />
+        <div className="mini-seek-row">
+          <button className="icon-btn mini-skip" onClick={() => onSkip(-10)} aria-label="rewind 10 seconds">
+            <SkipTenIcon />
+          </button>
+          <input
+            className="mini-seek"
+            type="range"
+            min={0}
+            max={duration || 0}
+            value={Math.min(progress, duration || 0)}
+            onChange={(e) => onSeek(Number(e.target.value))}
+            style={{ "--pct": `${pct}%` }}
+          />
+          <button className="icon-btn mini-skip" onClick={() => onSkip(10)} aria-label="forward 10 seconds">
+            <SkipTenIcon forward />
+          </button>
+        </div>
       )}
       <div className="mini-row">
         <JourneyThumb journey={journey} size={44} radius={10} />
@@ -2830,6 +2852,41 @@ export default function TheVanApp() {
     }
   }
 
+  // Relative seek (+/- seconds) for recorded Journeys. Clamped to [0, duration].
+  // No-op for Live Radio (no seekable timeline) and when nothing is loaded.
+  // Uses the same <audio> element / seek path as the progress bar.
+  function handleSkip(delta) {
+    const a = audioRef.current;
+    if (!a || liveOn || !currentJourney) return;
+    const dur = isFinite(a.duration) && a.duration > 0 ? a.duration : null;
+    let t = (a.currentTime || 0) + delta;
+    if (t < 0) t = 0;
+    if (dur !== null && t > dur) t = dur;
+    a.currentTime = t;
+    setProgress(t);
+  }
+  const handleSkipRef = useRef(handleSkip);
+  handleSkipRef.current = handleSkip;
+
+  // Lock-screen / headset / notification-shade seek buttons (Media Session API).
+  // Registered only while a recorded Journey is loaded and removed for Live Radio,
+  // so the live stream's media controls are left exactly as before.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    const ms = navigator.mediaSession;
+    const recorded = !liveOn && currentId != null;
+    try {
+      ms.setActionHandler("seekbackward", recorded ? () => handleSkipRef.current(-10) : null);
+      ms.setActionHandler("seekforward", recorded ? () => handleSkipRef.current(10) : null);
+    } catch (e) { /* action not supported on this browser */ }
+    return () => {
+      try {
+        ms.setActionHandler("seekbackward", null);
+        ms.setActionHandler("seekforward", null);
+      } catch (e) { /* ignore */ }
+    };
+  }, [liveOn, currentId]);
+
   function handleClosePlayer() {
     setIsPlaying(false);
     setCurrentId(null);
@@ -2897,6 +2954,7 @@ export default function TheVanApp() {
         onToggle={() => setIsPlaying((p) => !p)}
         onNext={handleNext}
         onPrev={handlePrev}
+        onSkip={handleSkip}
         progress={progress}
         duration={duration}
         onSeek={handleSeek}
@@ -2932,7 +2990,7 @@ const CSS = `
   color: var(--text);
   font-family: 'Inter', -apple-system, sans-serif;
   position: relative;
-  padding-bottom: 158px;
+  padding-bottom: 184px;
   overflow-x: hidden;
 }
 
@@ -3195,6 +3253,9 @@ const CSS = `
   margin-bottom: 10px;
   cursor: pointer;
 }
+.mini-seek-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.mini-seek-row .mini-seek { flex: 1; width: auto; min-width: 0; margin-bottom: 0; }
+.mini-skip { width: 32px; height: 32px; }
 .mini-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 11px; height: 11px; border-radius: 50%;
