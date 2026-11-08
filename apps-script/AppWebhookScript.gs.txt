@@ -1,0 +1,1323 @@
+// THE VAN — shared Apps Script webhook.
+// v5 — SECURITY & BUG FIXES (see list at the very bottom of this file for
+// exactly what changed and why, so you can review before redeploying).
+// v4 closed a gap left in v3: "Approved" alone was enough to make a photo
+// public, with no check that Consent to Publish was actually TRUE for that
+// same row. Every place that decides Drive sharing now requires BOTH
+// Status = "Approved" AND Consent to Publish = TRUE — see fix list at the
+// bottom for the exact functions this touched.
+// v5 switches the generated Photo URL to a more hotlink-reliable Google CDN
+// form (lh3.googleusercontent.com instead of drive.google.com/thumbnail) —
+// see item 9 in the fix list at the bottom.
+//
+// Handles THREE things through the SAME deployed URL:
+//   1. Route Submissions (Pick the Route)       — doPost, form_type absent/"route"  (UNCHANGED behaviour)
+//   2. Postcards from the Road                  — doPost, form_type === "postcard"
+//   3. Reading back APPROVED postcards only     — doGet ?action=approved_postcards
+//
+// This REPLACES your existing script's code 1-for-1. Paste this whole file
+// over everything in the Apps Script editor, save, then:
+//   1. Run migratePostcardsSheet() once from the function dropdown (safe to
+//      run even if you already ran setupSheet before — it only ADDS missing
+//      columns, never touches existing data).
+//   2. Run lockDownPendingPostcardPhotos() once — this now syncs EVERY
+//      postcard photo's Drive sharing to the correct state: public only for
+//      rows that are Status="Approved" AND Consent to Publish=TRUE, private
+//      for every other row (Pending, Rejected, or Approved-without-consent).
+//      Safe to run more than once.
+//   3. Set up the one NEW trigger this version needs (Drive sharing changes
+//      automatically when you approve/reject a postcard) — see "ONE-TIME
+//      TRIGGER SETUP" near the bottom. This can't be done by pasting code;
+//      it's a few clicks in the Apps Script UI.
+//   4. Re-deploy ("Manage deployments" → pencil icon → "New version" →
+//      Deploy). The URL stays the same.
+// Google will likely ask you to re-authorize (new Drive sharing calls,
+// CacheService) — same "Advanced → Go to ... (unsafe) → Allow" flow as before.
+
+var SHEET_ID = "1LQYCy84OWmOSnC4BHEFONB2Bw5vcCUz3c-3usU_ZXmQ";
+
+var ROUTE_HEADERS = [
+  "Submission ID", "Destination", "Latitude", "Longitude",
+  "Music Genre", "Song Title", "Artist", "Music URL",
+  "User Message", "Created At", "Status", "User Name"
+];
+
+// Fresh installs get all 15 columns from the start. Existing sheets (made by
+// the earlier version of this script) only have the first 13 — those get the
+// last two ("Consent to Publish", "Photo File ID") appended by
+// migratePostcardsSheet(), never inserted in the middle, so nothing shifts.
+var POSTCARD_HEADERS = [
+  "Submission ID", "Created At", "Place Name", "Location Text",
+  "Latitude", "Longitude", "Story", "Display Name",
+  "Song Title", "Artist", "Music URL", "Photo URL", "Status",
+  "Consent to Publish", "Photo File ID"
+];
+
+var POSTCARDS_DRIVE_FOLDER_NAME = "THE VAN - Postcards";
+
+// Server-side limits (defense in depth — the frontend has its own limits,
+// but a request can always skip the frontend).
+var POSTCARD_LIMITS = {
+  place_name: 120,
+  location_text: 200,
+  story: 2000,
+  display_name: 80,
+  song_title: 120,
+  artist: 120,
+  music_url: 500,
+};
+var ALLOWED_PHOTO_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+var MAX_PHOTO_BYTES = 8 * 1024 * 1024; // 8MB decoded — the client resizes to well under 1MB, this just guards against a bypassed client
+
+// ---- Setup / migration ----
+
+// Run this ONCE manually (function dropdown → setupSheet → Run) to create
+// both tabs if they don't exist yet, and to run the Postcards migration.
+// Safe to run again any time — it only creates what's missing.
+function setupSheet() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+
+  var routeSheet = ss.getSheetByName("Route Submissions");
+  if (!routeSheet) {
+    routeSheet = ss.insertSheet("Route Submissions");
+    routeSheet.appendRow(ROUTE_HEADERS);
+    Logger.log("Created 'Route Submissions' tab with headers.");
+  } else {
+    Logger.log("'Route Submissions' tab already exists — left untouched.");
+  }
+
+  var postcardSheet = ss.getSheetByName("Postcards");
+  if (!postcardSheet) {
+    postcardSheet = ss.insertSheet("Postcards");
+    postcardSheet.appendRow(POSTCARD_HEADERS);
+    Logger.log("Created 'Postcards' tab with headers (including Consent to Publish / Photo File ID).");
+  } else {
+    Logger.log("'Postcards' tab already exists — running migration to check its columns...");
+  }
+
+  migratePostcardsSheet();
+
+  var folder = getOrCreatePostcardsFolder();
+  Logger.log("Postcards Drive folder ready: " + folder.getUrl());
+}
+
+// Run once on an EXISTING sheet: adds the "User Name" column at the end of
+// "Route Submissions" (the name now collected in Pick the Route). Never moves
+// or edits existing columns. Safe to run again.
+function migrateRouteSheet() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName("Route Submissions");
+  if (!sheet) { Logger.log("migrateRouteSheet: no 'Route Submissions' sheet yet."); return; }
+  var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  if (header.indexOf("User Name") === -1) {
+    sheet.getRange(1, sheet.getLastColumn() + 1).setValue("User Name");
+    Logger.log("migrateRouteSheet: added 'User Name' column.");
+  } else {
+    Logger.log("migrateRouteSheet: 'User Name' column already present.");
+  }
+}
+
+// Safe to run any number of times. Only ADDS columns that are missing
+// ("Consent to Publish", "Photo File ID") — appended at the end, so existing
+// column order, names and data are never touched. Also backfills
+// "Photo File ID" for already-existing rows by extracting the file ID out
+// of their existing "Photo URL" (non-destructive: only fills blanks, never
+// overwrites a value that's already there).
+function migratePostcardsSheet() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName("Postcards");
+  if (!sheet) {
+    Logger.log("migratePostcardsSheet: no 'Postcards' sheet found yet — run setupSheet() first.");
+    return;
+  }
+
+  var lastCol = sheet.getLastColumn();
+  var header = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var added = [];
+
+  function ensureColumn(name) {
+    var existingIdx = header.indexOf(name);
+    if (existingIdx !== -1) return existingIdx + 1;
+    var newCol = sheet.getLastColumn() + 1;
+    sheet.getRange(1, newCol).setValue(name);
+    header.push(name);
+    added.push(name);
+    return newCol;
+  }
+
+  var fileIdCol = ensureColumn("Photo File ID");
+  ensureColumn("Consent to Publish");
+
+  var numRows = sheet.getLastRow() - 1;
+  if (numRows > 0) {
+    var photoUrlColIdx = header.indexOf("Photo URL") + 1;
+    if (photoUrlColIdx) {
+      var fileIdRange = sheet.getRange(2, fileIdCol, numRows, 1);
+      var fileIdValues = fileIdRange.getValues();
+      var urlValues = sheet.getRange(2, photoUrlColIdx, numRows, 1).getValues();
+      var backfilled = 0;
+      for (var i = 0; i < numRows; i++) {
+        if (fileIdValues[i][0]) continue; // never overwrite an existing value
+        var url = String(urlValues[i][0] || "");
+        var match = url.match(/[?&]id=([-\w]+)/);
+        if (match) {
+          sheet.getRange(2 + i, fileIdCol).setValue(match[1]);
+          backfilled++;
+        }
+      }
+      Logger.log("migratePostcardsSheet: backfilled Photo File ID for " + backfilled + " of " + numRows + " existing row(s) from their Photo URL.");
+    }
+  }
+
+  if (added.length) {
+    Logger.log("migratePostcardsSheet: added column(s) " + added.join(", ") + ". All existing columns and data were left exactly as they were.");
+    Logger.log("migratePostcardsSheet: NOTE — existing rows now have a BLANK 'Consent to Publish' (it wasn't captured before this fix). If any of them are already 'Approved', please double-check by hand that the person actually agreed to publication; the app will no longer show a row as approved unless Consent to Publish is TRUE.");
+  } else {
+    Logger.log("migratePostcardsSheet: all columns already present — nothing to add.");
+  }
+}
+
+// One-time (but safe to re-run any time) sync of every postcard photo's
+// Drive sharing to match its row — this is the function that actually
+// closes the gap the OLD script left (photos made public on upload,
+// before any moderation). A photo is left/made PUBLIC ONLY when BOTH:
+//   - Status is exactly "Approved", AND
+//   - Consent to Publish is explicitly TRUE (via isConsentTrue — blank,
+//     FALSE, or anything else does NOT count, even if Status says Approved).
+// Every other row is forced PRIVATE. This is the exact same rule the Van
+// Atlas read side (getApprovedPostcardsJSON) already enforces — a photo can
+// now never be public without also being something Van Atlas would show.
+// Requires migratePostcardsSheet() to have run first (needs the
+// "Photo File ID" and "Consent to Publish" columns).
+function lockDownPendingPostcardPhotos() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName("Postcards");
+  if (!sheet) { Logger.log("lockDownPendingPostcardPhotos: no 'Postcards' sheet found."); return; }
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) { Logger.log("lockDownPendingPostcardPhotos: no postcard rows yet — nothing to do."); return; }
+  var header = values[0].map(function (h) { return String(h).trim(); });
+  var statusIdx = header.indexOf("Status");
+  var fileIdIdx = header.indexOf("Photo File ID");
+  var consentIdx = header.indexOf("Consent to Publish");
+  if (statusIdx === -1 || fileIdIdx === -1 || consentIdx === -1) {
+    Logger.log("lockDownPendingPostcardPhotos: required columns missing (Status / Photo File ID / Consent to Publish) — run migratePostcardsSheet() first.");
+    return;
+  }
+  var madePublic = 0, lockedPrivate = 0, skippedNoPhoto = 0, errors = 0;
+  for (var r = 1; r < values.length; r++) {
+    var status = String(values[r][statusIdx] || "").trim();
+    var consentOk = isConsentTrue(values[r][consentIdx]);
+    var fileId = values[r][fileIdIdx];
+    if (!fileId) { skippedNoPhoto++; continue; }
+    var shouldBePublic = status === "Approved" && consentOk;
+    try {
+      if (shouldBePublic) {
+        DriveApp.getFileById(fileId).setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        madePublic++;
+      } else {
+        DriveApp.getFileById(fileId).setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+        lockedPrivate++;
+      }
+    } catch (err) {
+      errors++;
+    }
+  }
+  Logger.log(
+    "lockDownPendingPostcardPhotos: " + madePublic + " photo(s) confirmed/made PUBLIC (Approved + Consent=TRUE), " +
+    lockedPrivate + " made PRIVATE (everything else — Pending, Rejected, or Approved without explicit consent), " +
+    skippedNoPhoto + " skipped (no photo on file), " + errors + " error(s) (file missing/already inaccessible)."
+  );
+}
+
+function getOrCreatePostcardsFolder() {
+  var folders = DriveApp.getFoldersByName(POSTCARDS_DRIVE_FOLDER_NAME);
+  if (folders.hasNext()) return folders.next();
+  return DriveApp.createFolder(POSTCARDS_DRIVE_FOLDER_NAME);
+}
+
+// ---- Basic server-side rate limiting (defense in depth) ----
+// Crude but real: a script-wide counter per form type, reset every 60
+// seconds, via CacheService (no per-user identity is available to a public
+// Apps Script Web App, so this is a blunt circuit-breaker against an abuse
+// burst, not real per-user spam protection — say so plainly, don't oversell it).
+function checkRateLimit(bucket, maxPerWindow, windowSeconds) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var key = "ratelimit_" + bucket;
+    var raw = cache.get(key);
+    var count = raw ? parseInt(raw, 10) : 0;
+    if (count >= maxPerWindow) return false;
+    cache.put(key, String(count + 1), windowSeconds);
+    return true;
+  } catch (err) {
+    return true; // never let the rate limiter itself block a legitimate request
+  }
+}
+
+// ---- HTTP entry points ----
+
+function doGet(e) {
+  var action = e && e.parameter && e.parameter.action;
+  if (action === "approved_postcards") {
+    return getApprovedPostcardsJSON();
+  }
+  if (action === "promotions") {
+    return getPromotionsJSON();
+  }
+  if (action === "content") {
+    return getContentJSON();
+  }
+  return ContentService.createTextOutput("THE VAN webhook is live ✅ (routes: route submissions + postcards)");
+}
+
+function doPost(e) {
+  var data;
+  try {
+    if (!e || !e.postData || !e.postData.contents) throw new Error("empty");
+    data = JSON.parse(e.postData.contents);
+    if (!data || typeof data !== "object") throw new Error("not-object");
+  } catch (err) {
+    return jsonOutput({ ok: false, error: "invalid-request" });
+  }
+
+  var formType = data.form_type;
+  if (!formType || formType === "route") {
+    return handleRouteSubmission(data);
+  }
+  if (formType === "postcard") {
+    return handlePostcardSubmission(data);
+  }
+  if (formType === "poll_vote") {
+    return handlePollVote(data);
+  }
+  if (formType === "content_draft") {
+    return handleContentDraft(data);
+  }
+  return jsonOutput({ ok: false, error: "invalid-request" });
+}
+
+function jsonOutput(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function clampCoord(value, min, max) {
+  var n = parseFloat(value);
+  if (!isFinite(n) || n < min || n > max) return "";
+  return n;
+}
+
+// Single shared definition of what counts as "explicit TRUE" for consent —
+// used everywhere a sharing decision or the Van Atlas read depends on it, so
+// the rule can never drift between those places again. Only a real boolean
+// true, or the exact text "TRUE" (what a Sheets checkbox/typed value looks
+// like when read back), counts. Blank, "FALSE", "false", "pending", or
+// anything else is NOT consent.
+function isConsentTrue(v) {
+  return v === true || String(v).trim().toUpperCase() === "TRUE";
+}
+
+// ---- Route Submissions ----
+// UNCHANGED schema/behaviour from before (same columns, same column names,
+// same leniency on missing fields) — only added: basic validation/sanitizing
+// so a malformed or hostile request can't write garbage, and a rate limit.
+// No new field is required from the frontend; everything it already sends
+// keeps working exactly as before.
+function handleRouteSubmission(data) {
+  if (!checkRateLimit("route", 30, 60)) {
+    return jsonOutput({ ok: false, error: "rate-limited" });
+  }
+
+  var destination = String(data.destination_name || "").trim().slice(0, 120);
+  if (!destination) {
+    return jsonOutput({ ok: false, error: "missing-fields" });
+  }
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName("Route Submissions");
+  if (!sheet) {
+    sheet = ss.insertSheet("Route Submissions");
+    sheet.appendRow(ROUTE_HEADERS);
+  }
+
+  var id = Utilities.getUuid();
+  sheet.appendRow([
+    id,
+    destination,
+    clampCoord(data.latitude, -90, 90),
+    clampCoord(data.longitude, -180, 180),
+    String(data.music_genre || "").trim().slice(0, 60),
+    String(data.song_title || "").trim().slice(0, 120),
+    String(data.artist || "").trim().slice(0, 120),
+    String(data.music_url || "").trim().slice(0, 500),
+    String(data.user_message || "").trim().slice(0, 2000),
+    new Date(),
+    String(data.status || "new").trim().slice(0, 30),
+    String(data.user_name || "").trim().slice(0, 60)
+  ]);
+
+  return jsonOutput({ ok: true, id: id });
+}
+
+// ---- Postcards from the Road ----
+function handlePostcardSubmission(data) {
+  if (!checkRateLimit("postcard", 20, 60)) {
+    return jsonOutput({ ok: false, error: "rate-limited" });
+  }
+
+  // FIX: consent must arrive AND be validated server-side. A checkbox the
+  // frontend happened to check is not proof of anything if the value never
+  // reaches here (which, before this fix, it didn't) or if the server
+  // doesn't check it.
+  if (data.consent !== true) {
+    return jsonOutput({ ok: false, error: "consent-required" });
+  }
+
+  var placeName = String(data.place_name || "").trim().slice(0, POSTCARD_LIMITS.place_name);
+  var locationText = String(data.location_text || "").trim().slice(0, POSTCARD_LIMITS.location_text);
+  var story = String(data.story || "").trim().slice(0, POSTCARD_LIMITS.story);
+  if (!placeName || !locationText || !story) {
+    return jsonOutput({ ok: false, error: "missing-fields" });
+  }
+
+  if (!data.photo_base64 || typeof data.photo_base64 !== "string") {
+    return jsonOutput({ ok: false, error: "photo-required" });
+  }
+  var mime = data.photo_mime || "image/jpeg";
+  if (ALLOWED_PHOTO_MIME_TYPES.indexOf(mime) === -1) {
+    return jsonOutput({ ok: false, error: "invalid-photo-type" });
+  }
+  // Estimate decoded size from the base64 string length before touching it.
+  var approxBytes = Math.floor((data.photo_base64.length * 3) / 4);
+  if (approxBytes > MAX_PHOTO_BYTES) {
+    return jsonOutput({ ok: false, error: "photo-too-large" });
+  }
+
+  var displayName = String(data.display_name || "").trim().slice(0, POSTCARD_LIMITS.display_name);
+  var songTitle = String(data.song_title || "").trim().slice(0, POSTCARD_LIMITS.song_title);
+  var artist = String(data.artist || "").trim().slice(0, POSTCARD_LIMITS.artist);
+  var musicUrlRaw = String(data.music_url || "").trim().slice(0, POSTCARD_LIMITS.music_url);
+  var musicUrl = /^https?:\/\//i.test(musicUrlRaw) ? musicUrlRaw : "";
+  var latitude = clampCoord(data.latitude, -90, 90);
+  var longitude = clampCoord(data.longitude, -180, 180);
+
+  var folder, file, blob, bytes;
+  try {
+    bytes = Utilities.base64Decode(data.photo_base64);
+    blob = Utilities.newBlob(bytes, mime, "postcard_" + new Date().getTime() + ".jpg");
+    folder = getOrCreatePostcardsFolder();
+    file = folder.createFile(blob);
+    // FIX: do NOT make this public now. It stays private (the default for a
+    // freshly created file — nothing sharing-related is called here) until
+    // a moderator sets this row's Status to "Approved" in the Sheet, which
+    // the onPostcardStatusEdit trigger below turns into the actual Drive
+    // sharing change. If the trigger isn't installed yet, approving a row
+    // will NOT make its photo public — see "ONE-TIME TRIGGER SETUP" below.
+  } catch (err) {
+    return jsonOutput({ ok: false, error: "photo-upload-failed" });
+  }
+
+  // v5: switched from drive.google.com/thumbnail?id=...&sz=... to the
+  // lh3.googleusercontent.com/d/... form. Both only work once the file is
+  // actually shared ANYONE_WITH_LINK (handled elsewhere, on approval), but
+  // the drive.google.com/thumbnail endpoint is Google's thumbnail-generator
+  // and is known to intermittently refuse to render inside a plain <img>
+  // tag (serving an interstitial/blocked response instead of the image
+  // bytes) depending on Google's current anti-hotlinking rules. The
+  // lh3.googleusercontent.com form is the same CDN Google Photos/Drive use
+  // for their own public image embeds and is the more reliable one for
+  // direct hotlinking. This only affects photoUrl values generated for NEW
+  // submissions from now on — it does not retroactively fix the "Photo URL"
+  // cell already stored for existing rows (those keep their old link text
+  // until that row is re-submitted, or you manually edit the cell).
+  var photoUrl = "https://lh3.googleusercontent.com/d/" + file.getId() + "=w1600";
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName("Postcards");
+  if (!sheet) {
+    sheet = ss.insertSheet("Postcards");
+    sheet.appendRow(POSTCARD_HEADERS);
+  }
+  // Write by looking up each column's actual position from the sheet's own
+  // header row, not a hardcoded array index — so this keeps working no
+  // matter whether the sheet has the old 13 columns, the migrated 15, or a
+  // fresh 15-column install, without ever touching an unrelated column.
+  var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var rowValues = new Array(header.length).fill("");
+  function setCol(name, value) {
+    var i = header.indexOf(name);
+    if (i !== -1) rowValues[i] = value;
+  }
+
+  var id = Utilities.getUuid();
+  setCol("Submission ID", id);
+  setCol("Created At", new Date());
+  setCol("Place Name", placeName);
+  setCol("Location Text", locationText);
+  setCol("Latitude", latitude);
+  setCol("Longitude", longitude);
+  setCol("Story", story);
+  setCol("Display Name", displayName);
+  setCol("Song Title", songTitle);
+  setCol("Artist", artist);
+  setCol("Music URL", musicUrl);
+  setCol("Photo URL", photoUrl);
+  setCol("Status", "Pending");
+  setCol("Consent to Publish", true);
+  setCol("Photo File ID", file.getId());
+
+  sheet.appendRow(rowValues);
+
+  return jsonOutput({ ok: true, id: id, photo_saved: true });
+}
+
+// Only ever returns rows that are BOTH Status "Approved" AND have
+// Consent to Publish = TRUE — belt and suspenders, so a row can't become
+// publicly visible through a moderation mistake alone (e.g. approving a
+// legacy row from before consent was captured).
+function getApprovedPostcardsJSON() {
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName("Postcards");
+    if (!sheet) return jsonOutput({ ok: true, postcards: [] });
+    var values = sheet.getDataRange().getValues();
+    if (values.length < 2) return jsonOutput({ ok: true, postcards: [] });
+    var header = values[0].map(function (h) { return String(h).trim(); });
+    var idx = {};
+    header.forEach(function (h, i) { idx[h] = i; });
+
+    function get(row, name) {
+      var i = idx[name];
+      return i === undefined ? "" : row[i];
+    }
+    // isConsentTrue is the shared top-level function (see near clampCoord) —
+    // kept this filter exactly as it was, just no longer a local copy of it.
+
+    var out = [];
+    for (var r = 1; r < values.length; r++) {
+      var row = values[r];
+      var status = String(get(row, "Status") || "").trim();
+      if (status !== "Approved") continue;
+      if (!isConsentTrue(get(row, "Consent to Publish"))) continue;
+      out.push({
+        id: get(row, "Submission ID") || "",
+        placeName: get(row, "Place Name") || "",
+        locationText: get(row, "Location Text") || "",
+        latitude: get(row, "Latitude") || "",
+        longitude: get(row, "Longitude") || "",
+        story: get(row, "Story") || "",
+        displayName: get(row, "Display Name") || "",
+        songTitle: get(row, "Song Title") || "",
+        artist: get(row, "Artist") || "",
+        musicUrl: get(row, "Music URL") || "",
+        photoUrl: get(row, "Photo URL") || "",
+      });
+    }
+    return jsonOutput({ ok: true, postcards: out });
+  } catch (err) {
+    return jsonOutput({ ok: false, error: "server-error" });
+  }
+}
+
+// ---- Moderation (still just the Sheet — no admin panel) ----
+// 1. Open the Google Sheet → "Postcards" tab.
+// 2. Find the row for the postcard you want to moderate.
+// 3. Edit its "Status" cell: change "Pending" to exactly "Approved" or
+//    "Rejected" (capitalization matters).
+// 4. If the ONE-TIME TRIGGER below is set up, that edit automatically makes
+//    the photo public — but ONLY if that same row's "Consent to Publish"
+//    column is also explicitly TRUE. If Status says "Approved" but Consent
+//    to Publish is empty, FALSE, or anything else, the photo is forced/kept
+//    PRIVATE regardless — Approved alone is never enough. Anything other
+//    than "Approved" always makes/keeps the photo private, no exceptions.
+//    If the trigger ISN'T set up at all, the Sheet row will say "Approved"
+//    but the photo stays private and won't load anywhere until you set up
+//    the trigger (see below) — don't tell anyone a postcard is live until
+//    you've confirmed the photo actually loads.
+// 5. The app re-reads via the webhook live, so an approval shows up in Van
+//    Atlas next time it loads (usually within a few seconds to a minute) —
+//    and only if Status = Approved AND Consent to Publish = TRUE, same rule
+//    as the Drive sharing above (see getApprovedPostcardsJSON).
+
+// ---- ONE-TIME TRIGGER SETUP ----
+// This script is a STANDALONE script (not bound to the Spreadsheet), which
+// is why it had to be set up this way in the first place (see the original
+// Drive-loading bug from the "Extensions" menu). A standalone script can
+// still react to edits in the Sheet, but only via an INSTALLABLE trigger.
+//
+// KNOWN UI GAP: for a standalone script, the Triggers UI's "Add Trigger"
+// dialog often does NOT offer "From spreadsheet" at all in the "Select
+// event source" dropdown (only "Time-driven" / "From calendar" show up) —
+// that option is reserved for scripts bound to a Sheet/Doc/Form via
+// Extensions → Apps Script. This is not a bug in this script; it's just how
+// Apps Script's UI treats standalone projects. Use the CODE-BASED method
+// below instead — it is the normal, supported way to install an installable
+// spreadsheet trigger from a standalone script, and it's exactly what the
+// "From spreadsheet" option in the UI would have done anyway.
+//
+// HOW TO RUN IT (one time):
+//   1. Open this script in the Apps Script editor.
+//   2. At the top of the editor, in the function dropdown (next to "Run"
+//      and "Debug"), select "installPostcardStatusTrigger".
+//   3. Click "Run".
+//   4. The first time, it will ask you to authorize (same "unverified app"
+//      flow as before — click through "Advanced" → "Go to ... (unsafe)" if
+//      you see that warning, since this is your own script).
+//   5. Open "Executions" (left sidebar) or check Logger output to confirm
+//      it finished — it logs how many old triggers it removed and that it
+//      installed 1 new one.
+// This only creates/replaces the trigger itself — it does not touch any
+// Sheet data or any Drive file, and it's safe to run again later (it always
+// removes any existing onPostcardStatusEdit trigger first, so you never end
+// up with two firing on the same edit).
+//
+// If your Triggers UI DOES show "From spreadsheet" (older accounts/newer
+// Apps Script UI sometimes differ), you can use it instead — function:
+// onPostcardStatusEdit, event source: From spreadsheet, select the
+// TVR_App_Database spreadsheet, event type: On edit, Save. Either method
+// produces the same installable trigger; you only need to do ONE of them,
+// not both — running installPostcardStatusTrigger() after already adding
+// one by hand is still safe (it just replaces it).
+//
+// Until a trigger is active (by either method), editing the Status cell
+// only changes the Sheet text — it does NOT change the photo's privacy.
+// Don't approve anything for real use until you've confirmed the trigger is
+// active and tested once (see the test list in the main reply).
+// REMINDER (v4): once active, this trigger does NOT simply mirror the
+// Status cell onto the photo's sharing. Setting Status to "Approved" makes
+// the photo public ONLY when that row's "Consent to Publish" is explicitly
+// TRUE at the moment of the edit. An Approved row with empty/FALSE consent
+// is left/forced PRIVATE. If you later fill in consent on an already
+// "Approved" row, re-saving that same Status cell (or running
+// lockDownPendingPostcardPhotos() once) is what re-evaluates it — editing
+// the Consent column itself does not retrigger this, since the trigger only
+// watches the Status column.
+function onPostcardStatusEdit(e) {
+  try {
+    var range = e.range;
+    var sheet = range.getSheet();
+    if (sheet.getName() !== "Postcards") return;
+    if (range.getRow() === 1) return; // header row
+    if (range.getNumRows() !== 1 || range.getNumColumns() !== 1) return; // only react to a single-cell edit
+
+    var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+    var statusCol = header.indexOf("Status") + 1;
+    var fileIdCol = header.indexOf("Photo File ID") + 1;
+    var consentCol = header.indexOf("Consent to Publish") + 1;
+    if (statusCol === 0 || fileIdCol === 0 || consentCol === 0) return; // columns missing — run migratePostcardsSheet()
+    if (range.getColumn() !== statusCol) return; // only care about edits to the Status column
+
+    var row = range.getRow();
+    var newStatus = String(range.getValue()).trim();
+    var fileId = sheet.getRange(row, fileIdCol).getValue();
+    if (!fileId) return; // nothing to change
+
+    var file;
+    try {
+      file = DriveApp.getFileById(fileId);
+    } catch (err) {
+      return; // file missing/inaccessible — nothing we can do here
+    }
+
+    // FIX: Status "Approved" alone is no longer enough to make a photo
+    // public. Consent to Publish for THIS SAME ROW must also be explicitly
+    // TRUE — checked fresh here, not assumed. Blank, FALSE, or anything
+    // else means the photo stays (or becomes) private, even if the Status
+    // cell says "Approved".
+    if (newStatus === "Approved") {
+      var consentValue = sheet.getRange(row, consentCol).getValue();
+      if (isConsentTrue(consentValue)) {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      } else {
+        file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+      }
+    } else {
+      // "Pending", "Rejected", or anything else → make sure it's private.
+      file.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    }
+  } catch (err) {
+    // Never let a trigger error block the person's edit in the Sheet itself.
+  }
+}
+
+// Installs (or re-installs) the ONE installable trigger that makes
+// onPostcardStatusEdit actually fire when the "Status" column is edited in
+// the Sheet. Run this manually, once, from the Apps Script editor — see
+// "ONE-TIME TRIGGER SETUP" above for exactly how. Safe to re-run any time:
+// it always removes any existing onPostcardStatusEdit trigger first, so
+// running it twice never creates duplicates or double-fires. Touches only
+// this script project's own trigger list — no Sheet data, no Drive file.
+function installPostcardStatusTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  triggers.forEach(function (t) {
+    if (t.getHandlerFunction() === "onPostcardStatusEdit") {
+      ScriptApp.deleteTrigger(t);
+      removed++;
+    }
+  });
+
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  ScriptApp.newTrigger("onPostcardStatusEdit")
+    .forSpreadsheet(ss)
+    .onEdit()
+    .create();
+
+  Logger.log(
+    "installPostcardStatusTrigger: removed " + removed +
+    " old trigger(s) for onPostcardStatusEdit, installed 1 new On-Edit " +
+    "installable trigger bound to spreadsheet " + SHEET_ID + ". Check " +
+    "Executions (left sidebar) if you want to confirm it actually ran."
+  );
+}
+
+// ============================================================
+// WHAT CHANGED IN THIS VERSION, AND WHY (read before redeploying)
+// ============================================================
+//
+// 1. Consent was checked in the app's UI but never actually sent to the
+//    server, and the server never checked it either — so the Sheet never
+//    really recorded whether someone agreed to publication, and nothing
+//    stopped a submission arriving without it.
+//    Fixed: the app now sends `consent: true/false` in the payload; the
+//    server rejects the submission (error "consent-required") unless it is
+//    exactly `true`; a new "Consent to Publish" column stores it.
+//
+// 2. Postcard photos were made public (DriveApp.Access.ANYONE_WITH_LINK) the
+//    moment they were uploaded — before any moderation — so a Pending or
+//    even Rejected postcard's photo was already reachable by anyone with
+//    the link.
+//    Fixed: new photos are created PRIVATE and stay that way. A new
+//    installable trigger (onPostcardStatusEdit — see ONE-TIME TRIGGER SETUP
+//    above, this part needs a few manual clicks, it can't be pasted) makes
+//    a photo public ONLY when you set its row's Status to "Approved", and
+//    makes it private again if you change it away from "Approved". A new
+//    one-time function, lockDownPendingPostcardPhotos(), retroactively locks
+//    down any photo the OLD script already made public for a non-Approved
+//    row — run it once after migrating.
+//
+// 3. doPost had no real validation: a malformed request, an unlisted
+//    form_type, an oversized or wrong-type "photo", or a rapid-fire burst of
+//    requests would all be accepted or could crash the handler.
+//    Fixed: safe JSON parsing with a clear error instead of a crash; a
+//    whitelist on form_type; required-field checks; text length caps on
+//    every field; a whitelist of photo MIME types; a server-side size check
+//    on the decoded photo BEFORE it's written to Drive; a failed Drive write
+//    now rejects the whole submission (error "photo-upload-failed") instead
+//    of silently saving a postcard with a missing photo; and a basic,
+//    script-wide rate limit (CacheService — no per-user identity is
+//    available to an anonymous Web App, so this is a blunt circuit-breaker
+//    against a burst of requests, not real per-user spam protection; don't
+//    describe it to anyone as more than that).
+//
+// 4. Route Submissions: schema, column names, Spreadsheet ID and deployment
+//    URL are all UNCHANGED. No new field is required from the frontend. The
+//    only additions are the same kind of defensive validation/sanitizing as
+//    above, plus its own separate rate-limit bucket — existing data and
+//    existing behaviour for a normal submission are untouched.
+//
+// 5. setupSheet() now also runs migratePostcardsSheet() (safe, additive
+//    only) and clearly logs what it created vs. what already existed,
+//    instead of silently doing nothing on a second run.
+//
+// 6. Van Atlas no longer reads Postcards via the public CSV export (that
+//    exposed every row's text — place name, story, display name — to
+//    anyone who found the URL, regardless of Status, even though the photo
+//    itself was separately protected). It now reads through this script's
+//    own doGet ?action=approved_postcards, which filters server-side and
+//    only ever returns rows that are both Status "Approved" AND have
+//    Consent to Publish = TRUE. A Pending or Rejected row's text can no
+//    longer leave the server at all. Route Submissions still use the public
+//    CSV, unchanged — that was always meant to be a fully open community
+//    map (see the original Pick the Route brief).
+//
+// IMPORTANT CONSEQUENCE of #6: if any postcard was already set to
+// "Approved" before this fix, it will STOP showing in Van Atlas once this
+// is live, unless its "Consent to Publish" column is also TRUE — which it
+// won't be for any row created before this fix (migratePostcardsSheet()
+// leaves it blank for those, deliberately, since consent genuinely wasn't
+// captured for them). If you want an old approved postcard to keep
+// showing, you have to make that call yourself — check with whoever
+// submitted it if you're not sure, and only then set that row's "Consent to
+// Publish" cell to TRUE by hand.
+//
+// ============================================================
+// v4 — ONE MORE FIX, FOUND AFTER v3 (closes a gap in the write/sharing side)
+// ============================================================
+//
+// 7. v3 fixed the READ side correctly (getApprovedPostcardsJSON already
+//    required Status="Approved" AND Consent to Publish=TRUE — see #6 above),
+//    but the two places that actually control Drive SHARING —
+//    lockDownPendingPostcardPhotos() and onPostcardStatusEdit(e) — had been
+//    left checking Status alone. That meant a row marked "Approved" by
+//    mistake, or an old row approved before consent was ever captured,
+//    could still have its photo made/left PUBLIC on Drive even though Van
+//    Atlas would correctly refuse to list it. The photo link itself was the
+//    leak: someone with the direct Drive URL could still open it.
+//    Fixed:
+//      - New shared helper isConsentTrue(v) (defined once, near clampCoord)
+//        — returns true only for boolean `true` or the literal text "TRUE"
+//        (case-insensitive after trimming); anything else (blank, "FALSE",
+//        "maybe", a typo) is treated as NOT consented. All three places that
+//        care about consent (getApprovedPostcardsJSON,
+//        lockDownPendingPostcardPhotos, onPostcardStatusEdit) now call this
+//        exact same function, so there is only one definition of "consent is
+//        TRUE" anywhere in this script.
+//      - lockDownPendingPostcardPhotos() rewritten: it no longer only ever
+//        locks photos down. For every row with a photo, it now computes
+//        shouldBePublic = (Status === "Approved" AND isConsentTrue(Consent
+//        to Publish)) and sets the Drive file to ANYONE_WITH_LINK/VIEW when
+//        true, or PRIVATE/NONE when false — actively correcting both
+//        directions in one pass (e.g. it will now also re-lock an Approved
+//        row whose consent is blank or FALSE). Logs how many it made public,
+//        how many it locked private, how many had no photo, and any errors.
+//      - onPostcardStatusEdit(e) rewritten: when a row's Status is edited to
+//        "Approved", it now also reads that same row's "Consent to Publish"
+//        cell. The photo is only set to ANYONE_WITH_LINK if isConsentTrue()
+//        is true for that value; otherwise the photo is set PRIVATE even
+//        though the Sheet says "Approved". Any Status other than "Approved"
+//        still always forces PRIVATE, exactly as before — that rule did not
+//        change.
+//      - getApprovedPostcardsJSON() itself has NO behavior change — it was
+//        already correct in v3. Its own private copy of the consent check
+//        was simply removed and replaced with a call to the new shared
+//        isConsentTrue(), so there is one rule instead of two copies of it.
+//
+// IMPORTANT CONSEQUENCE of #7: if you already ran the v3 version of
+// lockDownPendingPostcardPhotos() for real, re-run this v4 version once
+// after installing it. It is still fully idempotent and safe to run any
+// number of times — it will simply also re-lock any Approved-but-no-consent
+// row that v3's version might have left public, and leave everything else
+// exactly as it already was.
+//
+// 8. Added installPostcardStatusTrigger() — a one-time setup helper. The
+//    Apps Script Triggers UI's "Add Trigger" dialog does not offer "From
+//    spreadsheet" as an event source for a STANDALONE script in some
+//    accounts (only "Time-driven"/"From calendar" show up), which made it
+//    impossible to add the onPostcardStatusEdit trigger by hand through the
+//    UI alone. This function creates the exact same installable trigger via
+//    code instead — run it once from the Apps Script editor (see "ONE-TIME
+//    TRIGGER SETUP" above). It only manages this project's trigger list; it
+//    never touches Sheet data or Drive files, and re-running it is always
+//    safe (it removes any existing onPostcardStatusEdit trigger first).
+//
+// ============================================================
+// v5 — ONE MORE FIX (Photo URL reliability)
+// ============================================================
+//
+// 9. An approved postcard's photo was stored as a "Photo URL" using Google's
+//    drive.google.com/thumbnail?id=...&sz=... endpoint. That endpoint is a
+//    thumbnail GENERATOR, not a stable public image URL — depending on
+//    Google's current anti-hotlinking behaviour it can refuse to render
+//    inside a plain <img> tag (serving a blocked/placeholder response
+//    instead of the actual image), even though the underlying Drive file is
+//    correctly shared ANYONE_WITH_LINK. Observed symptom: approving a
+//    postcard correctly (Status=Approved, Consent to Publish=TRUE, the Sheet
+//    row visibly populated) but the photo still not appearing on the Van
+//    Atlas card in the app.
+//    Fixed: new submissions now store the photo as a
+//    lh3.googleusercontent.com/d/<fileId>=w1600 URL instead — the same CDN
+//    form Google Photos/Drive use for their own public image embeds, which
+//    is the more reliable one for direct hotlinking. This only changes the
+//    URL generated for NEW submissions going forward.
+//
+// IMPORTANT CONSEQUENCE of #9: any postcard row approved BEFORE this fix
+// already has the old drive.google.com/thumbnail URL text saved in its
+// "Photo URL" cell, and this change does not retroactively rewrite that
+// cell. If a postcard you already approved still doesn't show its photo in
+// the app after redeploying this version, that row is carrying the old URL
+// format — either have that postcard re-submitted (a fresh submission will
+// get the new URL format automatically), or manually replace that one
+// cell's text with https://lh3.googleusercontent.com/d/<the same file ID>=w1600
+// (the file ID is also saved separately in that row's "Photo File ID"
+// column, so you don't need to extract it from the old URL).
+
+
+// =====================================================================
+// PROMOTION ENGINE (P2)  — internal promotion of THE VAN's own content only
+// =====================================================================
+// Sheet "Promotions" (same spreadsheet). Run setupPromotionsSheet() ONCE to create it.
+// Served to the app through doGet ?action=promotions. ONLY rows that are
+//   Status = Approved   AND   inside their Start/End dates   AND   with a valid Placement
+// are ever returned (drafts / pending / expired never leave the server).
+// Priority: 1 = shown first (blank = 100).  Language: ALL (or blank), EL or EN.
+// Target URL: "/atlas" "/route" "/postcards" "/roadbook" "/journeys" "/myvan" "/about"
+//             "/journey/19" (opens Journey #19)   or a full "https://..." link.
+// Type (optional, adds the small label on the card):
+//   JOURNEY_OF_WEEK, FEATURED_JOURNEY, REDISCOVER, SPECIAL_JOURNEY, LIVE_UPCOMING,
+//   NEW_FEATURE, ANNOUNCEMENT, COMMUNITY
+// Edits appear in the app within ~1-5 minutes (script cache 60s + app cache 5 min).
+
+var PROMO_SHEET_NAME = "Promotions";
+var PROMO_HEADERS = [
+  "ID", "Title", "Subtitle", "Image URL", "CTA Text EL", "CTA Text EN", "Target URL",
+  "Placement", "Type", "Priority", "Start Date", "End Date", "Status", "Language"
+];
+var PROMO_PLACEMENTS = ["HOME_HERO", "HOME_FEATURED", "JOURNEYS_FEATURED", "ATLAS_FEATURED", "COMMUNITY_FEATURED"];
+var PROMO_TYPES = ["JOURNEY_OF_WEEK", "FEATURED_JOURNEY", "REDISCOVER", "SPECIAL_JOURNEY", "LIVE_UPCOMING", "NEW_FEATURE", "ANNOUNCEMENT", "COMMUNITY"];
+var PROMO_STATUSES = ["Draft", "Pending", "Approved"];
+var PROMO_LANGUAGES = ["ALL", "EL", "EN"];
+var PROMO_CACHE_KEY = "promotions_v1";
+
+// Creates the "Promotions" sheet ONLY if it does not exist. Never touches an existing sheet.
+function setupPromotionsSheet() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  if (ss.getSheetByName(PROMO_SHEET_NAME)) {
+    Logger.log("setupPromotionsSheet: '" + PROMO_SHEET_NAME + "' already exists — left untouched.");
+    return;
+  }
+  var sheet = ss.insertSheet(PROMO_SHEET_NAME);
+  sheet.getRange(1, 1, 1, PROMO_HEADERS.length).setValues([PROMO_HEADERS])
+    .setFontWeight("bold").setBackground("#0a0d0b").setFontColor("#39ACD0");
+  sheet.setFrozenRows(1);
+  var rows = 500;
+  function dv(list) { return SpreadsheetApp.newDataValidation().requireValueInList(list, true).setAllowInvalid(false).build(); }
+  var col = {};
+  PROMO_HEADERS.forEach(function (h, i) { col[h] = i + 1; });
+  sheet.getRange(2, col["Placement"], rows, 1).setDataValidation(dv(PROMO_PLACEMENTS));
+  sheet.getRange(2, col["Type"], rows, 1).setDataValidation(dv(PROMO_TYPES).copy().setAllowInvalid(true).build());
+  sheet.getRange(2, col["Status"], rows, 1).setDataValidation(dv(PROMO_STATUSES));
+  sheet.getRange(2, col["Language"], rows, 1).setDataValidation(dv(PROMO_LANGUAGES).copy().setAllowInvalid(true).build());
+  sheet.getRange(2, col["Priority"], rows, 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireNumberGreaterThanOrEqualTo(1).setAllowInvalid(false).build());
+  sheet.getRange(2, col["Start Date"], rows, 2).setNumberFormat("yyyy-mm-dd");
+  // Example rows — all Draft, so NOTHING is shown until you set Status = Approved.
+  var examples = [
+    ["example-new-feature-el", "Νέο: Pick the Route", "Στείλε μας σε έναν προορισμό και διάλεξε το τραγούδι του.", "", "Δοκίμασέ το", "Try it", "/route", "HOME_FEATURED", "NEW_FEATURE", 1, "", "", "Draft", "EL"],
+    ["example-new-feature-en", "New: Pick the Route", "Send us to a destination and choose its song.", "", "Δοκίμασέ το", "Try it", "/route", "HOME_FEATURED", "NEW_FEATURE", 1, "", "", "Draft", "EN"],
+    ["example-journey-of-week", "Διαδρομή της εβδομάδας", "Μια εκπομπή που αξίζει να ξανακούσεις.", "", "Άκουσε τώρα", "Listen now", "/journey/19", "JOURNEYS_FEATURED", "JOURNEY_OF_WEEK", 1, "", "", "Draft", "ALL"]
+  ];
+  sheet.getRange(2, 1, examples.length, PROMO_HEADERS.length).setValues(examples);
+  Logger.log("setupPromotionsSheet: created '" + PROMO_SHEET_NAME + "' with 3 Draft example rows.");
+}
+
+function promoClean_(v, max) {
+  var t = String(v === null || v === undefined ? "" : v).replace(/[\u0000-\u001f]/g, " ").trim();
+  return t.length > max ? t.slice(0, max) : t;
+}
+
+function promoSafeUrl_(v, allowInternal) {
+  var u = promoClean_(v, 500);
+  if (!u) return "";
+  if (/^https:\/\//i.test(u)) return u;
+  if (allowInternal && (u.charAt(0) === "/" || /^journey:\d+$/i.test(u))) return u;
+  return "";
+}
+
+function promoDate_(v, endOfDay) {
+  if (v === "" || v === null || v === undefined) return null;
+  var d = (v instanceof Date) ? new Date(v.getTime()) : new Date(String(v));
+  if (isNaN(d.getTime())) return null;
+  if (endOfDay && d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0) {
+    d.setHours(23, 59, 59, 999); // an End Date means "through that whole day"
+  }
+  return d;
+}
+
+function buildActivePromotions_(now) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName(PROMO_SHEET_NAME);
+  if (!sheet) return [];
+  var values = sheet.getDataRange().getValues();
+  if (values.length < 2) return [];
+  var idx = {};
+  values[0].forEach(function (h, i) { idx[String(h).trim().toLowerCase()] = i; });
+  function get(row, name) {
+    var i = idx[name.toLowerCase()];
+    return i === undefined ? "" : row[i];
+  }
+  var out = [];
+  for (var r = 1; r < values.length; r++) {
+    var row = values[r];
+    var id = promoClean_(get(row, "ID"), 80);
+    var title = promoClean_(get(row, "Title"), 140);
+    if (!id || !title) continue;
+    if (String(get(row, "Status")).trim().toLowerCase() !== "approved") continue;
+    var placement = String(get(row, "Placement")).trim().toUpperCase();
+    if (PROMO_PLACEMENTS.indexOf(placement) === -1) continue;
+    var start = promoDate_(get(row, "Start Date"), false);
+    var end = promoDate_(get(row, "End Date"), true);
+    if (start && now < start) continue;
+    if (end && now > end) continue;
+    var pr = parseFloat(get(row, "Priority"));
+    var lang = String(get(row, "Language")).trim().toUpperCase();
+    if (lang && PROMO_LANGUAGES.indexOf(lang) === -1) lang = "ALL";
+    var type = String(get(row, "Type")).trim().toUpperCase();
+    out.push({
+      id: id,
+      title: title,
+      subtitle: promoClean_(get(row, "Subtitle"), 280),
+      imageUrl: promoSafeUrl_(get(row, "Image URL"), false),
+      ctaEl: promoClean_(get(row, "CTA Text EL"), 40),
+      ctaEn: promoClean_(get(row, "CTA Text EN"), 40),
+      targetUrl: promoSafeUrl_(get(row, "Target URL"), true),
+      placement: placement,
+      type: PROMO_TYPES.indexOf(type) === -1 ? "" : type,
+      priority: isFinite(pr) ? pr : 100,
+      start: start ? start.toISOString() : null,
+      end: end ? end.toISOString() : null,
+      status: "approved",
+      language: lang || "ALL"
+    });
+  }
+  out.sort(function (a, b) { return a.priority - b.priority; });
+  return out;
+}
+
+function getPromotionsJSON() {
+  try {
+    var cache = CacheService.getScriptCache();
+    var hit = cache.get(PROMO_CACHE_KEY);
+    if (hit) return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON);
+    var json = JSON.stringify({ ok: true, promotions: buildActivePromotions_(new Date()) });
+    try { cache.put(PROMO_CACHE_KEY, json, 60); } catch (e) { /* too large / cache unavailable: serve uncached */ }
+    return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return jsonOutput({ ok: false, error: "promotions-unavailable" });
+  }
+}
+
+
+// =====================================================================
+// CONTENT ENGINE (P3) — "Song of the Day" + "The Van Poll"  (nothing else)
+// =====================================================================
+// Independent from the Promotion Engine (own sheets, own endpoint action).
+//
+// STATUS WORKFLOW  (you only ever do the first arrow, by hand, in the sheet):
+//   Pending  --(you)-->  Approved  --(daily trigger)-->  Scheduled  --(daily trigger)-->  Published
+//   (Rejected = you said no.   Closed = a poll whose End Date has passed.)
+// The app ONLY ever receives rows whose Status is exactly "Published".
+// Drafts created by the GitHub Action / Claude are ALWAYS written as "Pending" — the code
+// that receives them cannot write any other status.
+//
+// ONE-TIME SETUP (Apps Script editor, run each once, authorise when asked):
+//   1. setupContentSheets()      -> creates "Song of the Day", "Van Poll", "Poll Votes" (+ example Pending rows)
+//   2. installContentTrigger()   -> daily trigger (~06:00 script time zone) running contentEngineTick()
+//   3. (only for the automatic weekly drafts) Project Settings -> Script properties:
+//        CONTENT_WEBHOOK_SECRET = <a long random string>   (same value goes into the GitHub secret)
+//      Without it, the draft endpoint refuses every request. You can also simply type drafts into the sheet.
+// Then redeploy: Deploy -> Manage deployments -> Edit -> Version: New version  (same /exec URL).
+
+var SONG_SHEET_NAME = "Song of the Day";
+var POLL_SHEET_NAME = "Van Poll";
+var VOTES_SHEET_NAME = "Poll Votes";
+var SONG_HEADERS = ["ID", "Title", "Artist", "Link URL", "Note EL", "Note EN", "Publish Date", "Status", "Source", "Created At", "Published At"];
+var POLL_HEADERS = ["ID", "Question EL", "Question EN", "Option 1 EL", "Option 1 EN", "Option 2 EL", "Option 2 EN", "Option 3 EL", "Option 3 EN", "Option 4 EL", "Option 4 EN", "Start Date", "End Date", "Status", "Source", "Created At"];
+var VOTE_HEADERS = ["Timestamp", "Poll ID", "Option", "Token"];
+var CONTENT_STATUSES = ["Pending", "Approved", "Scheduled", "Published", "Rejected", "Closed"];
+var CONTENT_CACHE_KEY = "content_v1";
+var POLL_DEFAULT_DAYS = 7;
+
+function contentClean_(v, max) {
+  return String(v === null || v === undefined ? "" : v).replace(/[\u0000-\u001f]/g, " ").trim().slice(0, max);
+}
+function contentHttps_(v) {
+  var u = contentClean_(v, 500);
+  return /^https:\/\//i.test(u) ? u : "";
+}
+function contentDay_(v) {          // Date/ISO/yyyy-mm-dd -> Date at local midnight, or null
+  if (v === "" || v === null || v === undefined) return null;
+  var d = (v instanceof Date) ? new Date(v.getTime()) : new Date(String(v));
+  if (isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function contentToday_() { var d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+function contentAddDays_(d, n) { var x = new Date(d.getTime()); x.setDate(x.getDate() + n); return x; }
+function contentDayStr_(d) { return Utilities.formatDate(d, Session.getScriptTimeZone(), "yyyy-MM-dd"); }
+
+function contentHeaderIndex_(sheet) {
+  var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var idx = {};
+  header.forEach(function (h, i) { idx[String(h).trim()] = i; });
+  return idx;
+}
+
+// Creates the three sheets ONLY if missing. Never touches an existing sheet.
+function setupContentSheets() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  function mk(name, headers) {
+    if (ss.getSheetByName(name)) { Logger.log("'" + name + "' already exists — left untouched."); return null; }
+    var sh = ss.insertSheet(name);
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setBackground("#0a0d0b").setFontColor("#39ACD0");
+    sh.setFrozenRows(1);
+    return sh;
+  }
+  function statusDv() {
+    return SpreadsheetApp.newDataValidation().requireValueInList(CONTENT_STATUSES, true).setAllowInvalid(false).build();
+  }
+  var song = mk(SONG_SHEET_NAME, SONG_HEADERS);
+  if (song) {
+    song.getRange(2, SONG_HEADERS.indexOf("Status") + 1, 500, 1).setDataValidation(statusDv());
+    song.getRange(2, SONG_HEADERS.indexOf("Publish Date") + 1, 500, 1).setNumberFormat("yyyy-mm-dd");
+    song.getRange(2, 1, 1, SONG_HEADERS.length).setValues([[
+      "example-song", "Example title", "Example artist", "", "Μια σύντομη σημείωση για το τραγούδι.", "A short note about the song.", "", "Pending", "Manual", new Date(), ""
+    ]]);
+  }
+  var poll = mk(POLL_SHEET_NAME, POLL_HEADERS);
+  if (poll) {
+    poll.getRange(2, POLL_HEADERS.indexOf("Status") + 1, 500, 1).setDataValidation(statusDv());
+    poll.getRange(2, POLL_HEADERS.indexOf("Start Date") + 1, 500, 2).setNumberFormat("yyyy-mm-dd");
+    poll.getRange(2, 1, 1, POLL_HEADERS.length).setValues([[
+      "example-poll", "Ποιο ταξίδι σου ταιριάζει σήμερα;", "Which trip suits you today?",
+      "Θάλασσα", "The sea", "Βουνό", "The mountains", "Πόλη", "The city", "", "",
+      "", "", "Pending", "Manual", new Date()
+    ]]);
+  }
+  var votes = mk(VOTES_SHEET_NAME, VOTE_HEADERS);
+  if (votes) { votes.getRange(2, 1, 1000, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss"); }
+  Logger.log("setupContentSheets done. Example rows are 'Pending' so nothing is shown until you approve one.");
+}
+
+// Run once: creates the daily trigger (replaces an older one of ours).
+function installContentTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === "contentEngineTick") ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger("contentEngineTick").timeBased().everyDays(1).atHour(6).create();
+  Logger.log("Daily trigger installed (contentEngineTick, ~06:00).");
+}
+
+// Daily: Approved -> Scheduled -> Published, polls Published -> Closed. Safe to run any time, any number of times.
+// It never publishes anything that is not already Approved (or Scheduled, which only this function creates from Approved).
+function contentEngineTick() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return;
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var today = contentToday_();
+    var changed = false;
+
+    var song = ss.getSheetByName(SONG_SHEET_NAME);
+    if (song && song.getLastRow() > 1) {
+      var idx = contentHeaderIndex_(song);
+      var rows = song.getRange(2, 1, song.getLastRow() - 1, song.getLastColumn()).getValues();
+      // latest date already taken, so auto-queued songs go one per day after it
+      var last = today;
+      rows.forEach(function (r) {
+        var st = String(r[idx["Status"]]).trim();
+        var d = contentDay_(r[idx["Publish Date"]]);
+        if ((st === "Scheduled" || st === "Published" || st === "Approved") && d && d > last) last = d;
+      });
+      for (var i = 0; i < rows.length; i++) {
+        var r = rows[i], rowNo = i + 2;
+        var st = String(r[idx["Status"]]).trim();
+        var d = contentDay_(r[idx["Publish Date"]]);
+        if (st === "Approved") {
+          if (!d) { last = contentAddDays_(last, 1); d = last; song.getRange(rowNo, idx["Publish Date"] + 1).setValue(d); }
+          song.getRange(rowNo, idx["Status"] + 1).setValue("Scheduled");
+          st = "Scheduled"; changed = true;
+        }
+        if (st === "Scheduled" && d && d <= today) {
+          song.getRange(rowNo, idx["Status"] + 1).setValue("Published");
+          song.getRange(rowNo, idx["Published At"] + 1).setValue(new Date());
+          changed = true;
+        }
+      }
+    }
+
+    var poll = ss.getSheetByName(POLL_SHEET_NAME);
+    if (poll && poll.getLastRow() > 1) {
+      var pidx = contentHeaderIndex_(poll);
+      var prows = poll.getRange(2, 1, poll.getLastRow() - 1, poll.getLastColumn()).getValues();
+      for (var j = 0; j < prows.length; j++) {
+        var pr = prows[j], pno = j + 2;
+        var pst = String(pr[pidx["Status"]]).trim();
+        var start = contentDay_(pr[pidx["Start Date"]]);
+        var end = contentDay_(pr[pidx["End Date"]]);
+        if (pst === "Approved") {
+          if (!start) { start = today; poll.getRange(pno, pidx["Start Date"] + 1).setValue(start); }
+          if (!end) { end = contentAddDays_(start, POLL_DEFAULT_DAYS); poll.getRange(pno, pidx["End Date"] + 1).setValue(end); }
+          poll.getRange(pno, pidx["Status"] + 1).setValue("Scheduled");
+          pst = "Scheduled"; changed = true;
+        }
+        if (pst === "Scheduled" && start && start <= today) {
+          poll.getRange(pno, pidx["Status"] + 1).setValue("Published");
+          pst = "Published"; changed = true;
+        }
+        if (pst === "Published" && end && end < today) {
+          poll.getRange(pno, pidx["Status"] + 1).setValue("Closed");
+          changed = true;
+        }
+      }
+    }
+    if (changed) CacheService.getScriptCache().remove(CONTENT_CACHE_KEY);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ---- Read side: what the app is allowed to see ----
+function buildPublishedContent_() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var today = contentToday_();
+  var out = { song: null, poll: null };
+
+  var song = ss.getSheetByName(SONG_SHEET_NAME);
+  if (song && song.getLastRow() > 1) {
+    var idx = contentHeaderIndex_(song);
+    var rows = song.getRange(2, 1, song.getLastRow() - 1, song.getLastColumn()).getValues();
+    var best = null, bestDate = null;
+    rows.forEach(function (r) {
+      if (String(r[idx["Status"]]).trim() !== "Published") return;          // ONLY Published
+      var d = contentDay_(r[idx["Publish Date"]]);
+      if (!d || d > today) return;
+      var title = contentClean_(r[idx["Title"]], 140);
+      if (!title) return;
+      if (!bestDate || d > bestDate) { bestDate = d; best = r; }
+    });
+    if (best) {
+      out.song = {
+        id: contentClean_(best[idx["ID"]], 80),
+        title: contentClean_(best[idx["Title"]], 140),
+        artist: contentClean_(best[idx["Artist"]], 140),
+        link: contentHttps_(best[idx["Link URL"]]),
+        noteEl: contentClean_(best[idx["Note EL"]], 400),
+        noteEn: contentClean_(best[idx["Note EN"]], 400),
+        date: contentDayStr_(bestDate)
+      };
+    }
+  }
+
+  var poll = ss.getSheetByName(POLL_SHEET_NAME);
+  if (poll && poll.getLastRow() > 1) {
+    var pidx = contentHeaderIndex_(poll);
+    var prows = poll.getRange(2, 1, poll.getLastRow() - 1, poll.getLastColumn()).getValues();
+    var chosen = null, chosenStart = null, chosenEnd = null;
+    prows.forEach(function (r) {
+      if (String(r[pidx["Status"]]).trim() !== "Published") return;         // ONLY Published
+      var start = contentDay_(r[pidx["Start Date"]]);
+      var end = contentDay_(r[pidx["End Date"]]);
+      if (start && start > today) return;
+      if (end && end < today) return;
+      if (!contentClean_(r[pidx["Question EL"]], 200) && !contentClean_(r[pidx["Question EN"]], 200)) return;
+      var s = start || new Date(0);
+      if (!chosen || s > chosenStart) { chosen = r; chosenStart = s; chosenEnd = end; }
+    });
+    if (chosen) {
+      var options = [];
+      for (var n = 1; n <= 4; n++) {
+        var el = contentClean_(chosen[pidx["Option " + n + " EL"]], 80);
+        var en = contentClean_(chosen[pidx["Option " + n + " EN"]], 80);
+        if (el || en) options.push({ index: n - 1, el: el || en, en: en || el });
+      }
+      if (options.length >= 2) {
+        var pollId = contentClean_(chosen[pidx["ID"]], 80);
+        out.poll = {
+          id: pollId,
+          questionEl: contentClean_(chosen[pidx["Question EL"]], 200),
+          questionEn: contentClean_(chosen[pidx["Question EN"]], 200),
+          options: options,
+          votes: pollCounts_(ss, pollId, options.length),
+          end: chosenEnd ? contentDayStr_(chosenEnd) : null
+        };
+      }
+    }
+  }
+  return out;
+}
+
+function pollCounts_(ss, pollId, nOptions) {
+  var counts = [];
+  for (var i = 0; i < nOptions; i++) counts.push(0);
+  var sh = ss.getSheetByName(VOTES_SHEET_NAME);
+  if (!sh || sh.getLastRow() < 2) return counts;
+  var rows = sh.getRange(2, 2, sh.getLastRow() - 1, 2).getValues();   // Poll ID, Option
+  rows.forEach(function (r) {
+    if (String(r[0]) !== pollId) return;
+    var o = parseInt(r[1], 10);
+    if (o >= 0 && o < nOptions) counts[o]++;
+  });
+  return counts;
+}
+
+function getContentJSON() {
+  try {
+    var cache = CacheService.getScriptCache();
+    var hit = cache.get(CONTENT_CACHE_KEY);
+    if (hit) return ContentService.createTextOutput(hit).setMimeType(ContentService.MimeType.JSON);
+    var json = JSON.stringify({ ok: true, content: buildPublishedContent_() });
+    try { cache.put(CONTENT_CACHE_KEY, json, 60); } catch (e) { /* serve uncached */ }
+    return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return jsonOutput({ ok: false, error: "content-unavailable" });
+  }
+}
+
+// ---- Poll votes ----
+// Anonymous. The app sends a random per-browser token (stored only in that browser) so a repeat
+// vote from the same browser is ignored. It is NOT a fingerprint and it is not tied to any person.
+function handlePollVote(data) {
+  if (!checkRateLimit("poll_vote", 120, 60)) return jsonOutput({ ok: false, error: "rate-limited" });
+  var pollId = contentClean_(data.poll_id, 80);
+  var option = parseInt(data.option, 10);
+  var token = contentClean_(data.token, 64).replace(/[^A-Za-z0-9_-]/g, "");
+  if (!pollId || !isFinite(option) || option < 0 || option > 3 || token.length < 8) {
+    return jsonOutput({ ok: false, error: "invalid-request" });
+  }
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return jsonOutput({ ok: false, error: "busy" });
+  try {
+    var content = buildPublishedContent_();               // only the currently Published poll accepts votes
+    var poll = content.poll;
+    if (!poll || poll.id !== pollId) return jsonOutput({ ok: false, error: "poll-closed" });
+    if (option >= poll.options.length) return jsonOutput({ ok: false, error: "invalid-request" });
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sh = ss.getSheetByName(VOTES_SHEET_NAME);
+    if (!sh) return jsonOutput({ ok: false, error: "server-error" });
+    if (sh.getLastRow() > 1) {
+      var existing = sh.getRange(2, 2, sh.getLastRow() - 1, 3).getValues();   // Poll ID, Option, Token
+      for (var i = 0; i < existing.length; i++) {
+        if (String(existing[i][0]) === pollId && String(existing[i][2]) === token) {
+          return jsonOutput({ ok: true, duplicate: true, votes: pollCounts_(ss, pollId, poll.options.length) });
+        }
+      }
+    }
+    sh.appendRow([new Date(), pollId, option, token]);
+    CacheService.getScriptCache().remove(CONTENT_CACHE_KEY);
+    return jsonOutput({ ok: true, votes: pollCounts_(ss, pollId, poll.options.length) });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ---- Automatic drafts (GitHub Action -> here). ALWAYS written as "Pending". ----
+// Body: { form_type:"content_draft", secret, kind:"song"|"poll", item:{...} }
+function handleContentDraft(data) {
+  var secret = PropertiesService.getScriptProperties().getProperty("CONTENT_WEBHOOK_SECRET");
+  if (!secret || String(data.secret || "") !== secret) return jsonOutput({ ok: false, error: "forbidden" });
+  if (!checkRateLimit("content_draft", 60, 60)) return jsonOutput({ ok: false, error: "rate-limited" });
+  var item = data.item || {};
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var id = "auto-" + Utilities.formatDate(new Date(), "UTC", "yyyyMMddHHmmss") + "-" + Math.floor(Math.random() * 1000);
+  if (data.kind === "song") {
+    var sh = ss.getSheetByName(SONG_SHEET_NAME);
+    var title = contentClean_(item.title, 140), artist = contentClean_(item.artist, 140);
+    if (!sh || !title || !artist) return jsonOutput({ ok: false, error: "invalid-request" });
+    if (sh.getLastRow() > 1) {                     // never suggest the same song twice
+      var h = contentHeaderIndex_(sh);
+      var all = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+      for (var i = 0; i < all.length; i++) {
+        if (String(all[i][h["Title"]]).toLowerCase() === title.toLowerCase() && String(all[i][h["Artist"]]).toLowerCase() === artist.toLowerCase()) {
+          return jsonOutput({ ok: true, duplicate: true });
+        }
+      }
+    }
+    sh.appendRow([id, title, artist, contentHttps_(item.link), contentClean_(item.noteEl, 400), contentClean_(item.noteEn, 400), "", "Pending", "Auto", new Date(), ""]);
+    return jsonOutput({ ok: true, id: id });
+  }
+  if (data.kind === "poll") {
+    var psh = ss.getSheetByName(POLL_SHEET_NAME);
+    var qEl = contentClean_(item.questionEl, 200), qEn = contentClean_(item.questionEn, 200);
+    var opts = (item.options || []).slice(0, 4);
+    if (!psh || !(qEl || qEn) || opts.length < 2) return jsonOutput({ ok: false, error: "invalid-request" });
+    var row = [id, qEl, qEn];
+    for (var n = 0; n < 4; n++) {
+      var o = opts[n] || {};
+      row.push(contentClean_(o.el, 80), contentClean_(o.en, 80));
+    }
+    row.push("", "", "Pending", "Auto", new Date());
+    psh.appendRow(row);
+    return jsonOutput({ ok: true, id: id });
+  }
+  return jsonOutput({ ok: false, error: "invalid-request" });
+}

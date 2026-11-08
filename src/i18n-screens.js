@@ -142,6 +142,12 @@ export const SCREENS_EL = {
   "share.journeyText": "Άκου αυτή τη διαδρομή στο The Van.",
   "share.postcardText": "Μια καρτ ποστάλ από το The Van.",
   "share.sharedPostcard": "Κοινοποιημένη καρτ ποστάλ",
+  // Content Engine
+  "content.song.kicker": "Τραγούδι της ημέρας",
+  "content.song.listen": "Άκου",
+  "content.poll.kicker": "Το ερώτημα του Van",
+  "content.poll.thanks": "Ευχαριστούμε για την ψήφο σου",
+  "content.poll.votes": "{n} ψήφοι",
 };
 
 export const SCREENS_EN = {
@@ -277,6 +283,11 @@ export const SCREENS_EN = {
   "share.journeyText": "Listen to this journey on The Van.",
   "share.postcardText": "A postcard from The Van.",
   "share.sharedPostcard": "Shared postcard",
+  "content.song.kicker": "Song of the Day",
+  "content.song.listen": "Listen",
+  "content.poll.kicker": "The Van Poll",
+  "content.poll.thanks": "Thanks for voting",
+  "content.poll.votes": "{n} votes",
 };
 
 // Roadbook slides — English. Greek stays in ROADBOOK_SECTIONS (App.jsx).

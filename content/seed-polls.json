@@ -1,0 +1,5 @@
+[
+  { "questionEl": "Ποιο ταξίδι σου ταιριάζει σήμερα;", "questionEn": "Which trip suits you today?", "options": [ { "el": "Θάλασσα", "en": "The sea" }, { "el": "Βουνό", "en": "The mountains" }, { "el": "Πόλη", "en": "The city" } ] },
+  { "questionEl": "Τι ακούς πιο συχνά στον δρόμο;", "questionEn": "What do you listen to most on the road?", "options": [ { "el": "Παλιά τραγούδια", "en": "Old songs" }, { "el": "Νέες ανακαλύψεις", "en": "New discoveries" }, { "el": "Ραδιόφωνο", "en": "The radio" } ] },
+  { "questionEl": "Πότε σου αρέσει να ταξιδεύεις;", "questionEn": "When do you like to travel?", "options": [ { "el": "Ξημερώματα", "en": "At dawn" }, { "el": "Μεσημέρι", "en": "At midday" }, { "el": "Ηλιοβασίλεμα", "en": "At sunset" }, { "el": "Νύχτα", "en": "At night" } ] }
+]

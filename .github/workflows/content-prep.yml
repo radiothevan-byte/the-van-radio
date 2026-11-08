@@ -1,0 +1,33 @@
+# Weekly: prepare DRAFT Songs of the Day + a poll and put them in the Google Sheet as "Pending".
+# Nothing is published from here — you approve in the sheet (Pending -> Approved).
+# Needs the repository secret CONTENT_WEBHOOK_SECRET (and optionally ANTHROPIC_API_KEY).
+name: Prepare weekly content drafts
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"   # Mondays 05:00 UTC
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (print only, send nothing)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Create drafts
+        run: node scripts/prepare-content.mjs
+        env:
+          CONTENT_WEBHOOK_SECRET: ${{ secrets.CONTENT_WEBHOOK_SECRET }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
