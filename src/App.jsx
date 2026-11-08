@@ -13,7 +13,8 @@ import { Heart, Map as MapIcon, Info, Play, Pause, SkipBack, SkipForward, Instag
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { LangProvider, LangToggle, useLang } from "./i18n.jsx";
+import { LangProvider, LangToggle, useLang, DICT, placeLabel } from "./i18n.jsx";
+import { ROADBOOK_EN } from "./i18n-screens.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
 
 const LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCAFAAUADASIAAhEBAxEB/8QAHAABAAIDAQEBAAAAAAAAAAAAAAYHAQIFBAMI/8QAQRAAAQMDAwIDBQQGCgEFAAAAAQACAwQFEQYSIRMxB0FRFCJhcYEjMlKRFTRCYnOhCBYkM3KCorGywUMlU1SS0f/EABoBAQADAQEBAAAAAAAAAAAAAAABAwQCBQb/xAAwEQACAQIFAgQFBQEBAQAAAAAAAQIDEQQSITFBUWETInGBFJGxwfAFIzKh0fFC4f/aAAwDAQACEQMRAD8AvRERfHHvhERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBFkd1lCDVFutd7RwSAfmpsLmEWdzfUJvb6j80sLmEWd7fUfmgc09iClhcwiyXsHdzR9VkEEZBBCWFzVFtkLG9n4m/mEsDCLbyysb2+o/NRYGEWd7fxD803t9R+amwMIshzT2IKylgaotlguaO5A+ZUWBhFkOaexB+RWUsDVFsSB3wEy31CmwuaotuFgvaO5A+ZUWBhFnqMzjc38wspYXNUWxIHdY3t/E381NgYRbAg9kJA7pYGqLO5vqPzWeEsDVFssHuoBh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X2rnZRagsVRTU9NYXwERspGgFgD/ADeCdzicd+3CsjQhGNktGcOpJu74L08J/ESs19b69tztooLhbpmwztZnY7IPIB5BGCCFO1DPCez2W36SguFlpqynju59ulFXJ1Jd7uMF3mBg4PmDnzUzXj18ud5VZG6nfKrhERVHQREQBau7rZau7qGSYREQkIiIDLe62Wg4WdxREGyLXcU3FSLGyLXcU3FBY2UW114d2rxAgoYbpNVxto5eqwQSAB2cZDgQQcgd+4Un3FNxUxm4u8XqQ43VmcnUulLRq20PtN2pGz0zsFoBw6JwGA5h/ZIUb0V4Nad0TLPNE6ouUkjg5hrg17YcHILWgYDs497up1lMrpVZqOVPQjJG97Hy9hpTWCtNNB7WGdPr9MdTb+HdjOPgtYrdRwVE9TFSU8c9RgTSNjaHS4/EcZP1X33FNxXOZnVjyiz20UBt4t9GKJ2SaboN6Rycn3cY7r61NDS1lI6jqaaCemc3a6GSMOYR6bTxhfXcU3FMz6kWPNbbVQWelFLbqKno6cEkRQRhjc+uAvtU08VZTS01RG2WGZjo5GOGQ5pGCD8wt9xTcovrcm3BS1V/RjtUtwc6m1DXU1tc/eKTpB7mfAOJx24yRlWpYtLWjTtkjstvoomULWkOje0O6hPcvz94nzyuruKbirZ4ipNWkziNKMXdI85tdAaD9HmipjRbdnsxib0tvptxjC+7ImRMbHG1rGNAa1rRgADyAWdxTcVVc6sQfxP8KqLxIgpXvrZKCupNzYp2sDwWu5LXN4yMjI5XG1X4A2fUVts9PSV0tuntlM2kEzYw8TsBzlwyPeyXHP7ytHcmVdHE1IpKL2OXSi3do8MdjtrLTT2l9FBNRU8bImQzRh7cNGBwRjK9FTQUlYyJlTSwTthcHxiSNrgxw7EZHBHqvtlNxVWZnVkfGe30dVPFUT0tPNNCcxSyRtc+P/CSMj6JV0FJXtY2spaepEbt7BNG1+13qMjgr7bim4qMwsfKqoaSuYxlXSwVDY3B7BLGHhrh2IyOCPVcW9+H2ldRXBtxu1jo6yraAOq9py7Hbdg+99V39xTcV0puOzDinuYiijgjZFExscbAGtY0YDQOwA8gt1ruKbiubk2NkWu4puKCxsi13FNxQWNlq7um4rBOVACIiEhERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQH/2Q==";
@@ -464,6 +465,7 @@ function HomeView({ journeys, currentId, isPlaying, favorites, onPlay, onFav, on
 }
 
 function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFav, onOpen, goHome, myVanSongs, myVanPostcards, onRemoveSong, onRemovePostcard }) {
+  const { t } = useLang();
   const [category, setCategory] = useState("journeys"); // journeys | songs | postcards
   const favJourneys = journeys.filter((j) => favorites.includes(j.id));
   return (
@@ -508,8 +510,8 @@ function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFa
         myVanSongs.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon-circle"><Heart size={30} strokeWidth={1.8} /></div>
-            <div className="empty-title">Δεν έχεις αποθηκεύσει τραγούδια ακόμα</div>
-            <div className="empty-sub">Αποθήκευσε τραγούδια από τον Van Atlas.</div>
+            <div className="empty-title">{t("fav.noSongs.title")}</div>
+            <div className="empty-sub">{t("fav.noSongs.sub")}</div>
           </div>
         ) : (
           <div className="myvan-song-list">
@@ -533,8 +535,8 @@ function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFa
         myVanPostcards.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon-circle"><Heart size={30} strokeWidth={1.8} /></div>
-            <div className="empty-title">Δεν έχεις αποθηκεύσει καρτ ποστάλ ακόμα</div>
-            <div className="empty-sub">Αποθήκευσε ιστορίες από τον Van Atlas.</div>
+            <div className="empty-title">{t("fav.noCards.title")}</div>
+            <div className="empty-sub">{t("fav.noCards.sub")}</div>
           </div>
         ) : (
           <div className="myvan-postcard-grid">
@@ -600,6 +602,10 @@ function JourneyDetail({ journey, isCurrent, isPlaying, isFav, onPlay, onFav, on
 // panel), and the number/title/body/links/CTA in normal reading flow below
 // it, on the card's own surface background (not overlaid on the photo).
 function RoadbookSlide({ section, onNavigate, onPickChoice }) {
+  const { t, lang } = useLang();
+  const en = lang === "en" ? ROADBOOK_EN[section.n] : null;
+  const title = en ? en.title : section.title;
+  const body = en ? en.body : section.body;
   return (
     <div className="roadbook-slide">
       <div className="roadbook-slide-photo" style={section.photoRatio ? { aspectRatio: String(section.photoRatio) } : undefined}>
@@ -607,8 +613,8 @@ function RoadbookSlide({ section, onNavigate, onPickChoice }) {
       </div>
       <div className="roadbook-slide-content">
         <div className="roadbook-section-number">{section.n}</div>
-        <h2 className="roadbook-section-title">{section.title}</h2>
-        {section.body.map((p, i) => (
+        <h2 className="roadbook-section-title">{title}</h2>
+        {body.map((p, i) => (
           <p key={i} className="roadbook-section-p">{p}</p>
         ))}
         {section.links && (
@@ -620,8 +626,8 @@ function RoadbookSlide({ section, onNavigate, onPickChoice }) {
         )}
         {section.final && (
           <div className="roadbook-cta-row">
-            <button className="pill-btn" onClick={onPickChoice}>Διάλεξε τη θέση σου</button>
-            <button className="pill-btn pill-btn-ghost" onClick={() => onNavigate("journeys")}>Άκου τις διαδρομές μας</button>
+            <button className="pill-btn" onClick={onPickChoice}>{t("rb.choose")}</button>
+            <button className="pill-btn pill-btn-ghost" onClick={() => onNavigate("journeys")}>{t("rb.listen")}</button>
           </div>
         )}
       </div>
@@ -635,6 +641,7 @@ function RoadbookSlide({ section, onNavigate, onPickChoice }) {
 // prev/next arrows just call scrollTo on the same track, and onScroll (lightly
 // debounced via rAF) keeps `active` in sync so the dots reflect manual swipes.
 function RoadbookCarousel({ onNavigate, onPickChoice }) {
+  const { t } = useLang();
   const trackRef = useRef(null);
   const [active, setActive] = useState(0);
   const rafRef = useRef(null);
@@ -671,12 +678,12 @@ function RoadbookCarousel({ onNavigate, onPickChoice }) {
       </div>
 
       {active > 0 && (
-        <button type="button" className="roadbook-arrow roadbook-arrow-prev" onClick={() => goTo(active - 1)} aria-label="Προηγούμενο">
+        <button type="button" className="roadbook-arrow roadbook-arrow-prev" onClick={() => goTo(active - 1)} aria-label={t("rb.prev")}>
           <ChevronRight size={20} strokeWidth={2.4} style={{ transform: "rotate(180deg)" }} />
         </button>
       )}
       {active < ROADBOOK_SECTIONS.length - 1 && (
-        <button type="button" className="roadbook-arrow roadbook-arrow-next" onClick={() => goTo(active + 1)} aria-label="Επόμενο">
+        <button type="button" className="roadbook-arrow roadbook-arrow-next" onClick={() => goTo(active + 1)} aria-label={t("rb.next")}>
           <ChevronRight size={20} strokeWidth={2.4} />
         </button>
       )}
@@ -697,6 +704,7 @@ function RoadbookCarousel({ onNavigate, onPickChoice }) {
 }
 
 function RoadbookView({ onNavigate }) {
+  const { t } = useLang();
   const [choiceOpen, setChoiceOpen] = useState(false);
   return (
     <div className="view fade-in roadbook-cinematic">
@@ -705,7 +713,7 @@ function RoadbookView({ onNavigate }) {
           <MapIcon size={26} strokeWidth={1.8} />
         </div>
         <h1 className="page-title center">Roadbook</h1>
-        <div className="roadbook-sub">Η φιλοσοφία και το όραμα πίσω από το The Van.</div>
+        <div className="roadbook-sub">{t("rb.sub")}</div>
       </div>
 
       <RoadbookCarousel onNavigate={onNavigate} onPickChoice={() => setChoiceOpen(true)} />
@@ -715,10 +723,10 @@ function RoadbookView({ onNavigate }) {
       {choiceOpen && (
         <div className="roadbook-choice-overlay fade-in" onClick={() => setChoiceOpen(false)}>
           <div className="roadbook-choice-card" onClick={(e) => e.stopPropagation()}>
-            <div className="roadbook-choice-title">Διάλεξε τη θέση σου</div>
+            <div className="roadbook-choice-title">{t("rb.choose")}</div>
             <button className="pill-btn" onClick={() => onNavigate("route")}>🚐 Pick the Route</button>
             <button className="pill-btn pill-btn-ghost" onClick={() => onNavigate("postcards")}>💌 Postcards from the Road</button>
-            <button className="pill-btn pill-btn-ghost" onClick={() => setChoiceOpen(false)}>Άκυρο</button>
+            <button className="pill-btn pill-btn-ghost" onClick={() => setChoiceOpen(false)}>{t("rb.cancel")}</button>
           </div>
         </div>
       )}
@@ -727,15 +735,14 @@ function RoadbookView({ onNavigate }) {
 }
 
 function AboutView() {
+  const { t } = useLang();
   return (
     <div className="view fade-in">
       <div className="about-card">
         <img src={LOGO_B64} alt="The Van logo" className="about-logo" />
         <div className="eyebrow eyebrow-center">ABOUT</div>
         <p className="about-text">
-          Η mobile εμπειρία της εκπομπής μας. Εκπέμπουμε ζωντανά μέσα από τη συχνότητα του Moysikotherapeia Web Radio,
-          φέρνοντας την ατμόσφαιρα του ταξιδιού στα ηχεία σας. Μια μουσική διαδρομή που σας συνοδεύει παντού, με την
-          υπογραφή του The Van!
+          {t("about.text")}
         </p>
       </div>
       <h2 className="section-title">Connect</h2>
@@ -879,22 +886,23 @@ function loadFirebase() {
 const COPILOT_CHAT_URL = "https://mousikotherapeia-chat.mix1222507865.chatgpt.site/";
 
 function CoPilotChat({ onClose }) {
+  const { t } = useLang();
   const [loaded, setLoaded] = useState(false);
   return (
     <div className="copilot-frame-overlay fade-in">
       <div className="copilot-frame-bar">
         <div className="chat-header-title">Co-pilot Chat</div>
         <div className="copilot-frame-actions">
-          <a className="copilot-frame-link" href={COPILOT_CHAT_URL} target="_blank" rel="noopener noreferrer">Νέα καρτέλα ↗</a>
-          <button className="icon-btn" onClick={onClose} aria-label="Κλείσιμο">
+          <a className="copilot-frame-link" href={COPILOT_CHAT_URL} target="_blank" rel="noopener noreferrer">{t("copilot.newTab")}</a>
+          <button className="icon-btn" onClick={onClose} aria-label={t("copilot.close")}>
             <X size={18} />
           </button>
         </div>
       </div>
-      {!loaded && <div className="copilot-frame-loading">Φορτώνει το chat…</div>}
+      {!loaded && <div className="copilot-frame-loading">{t("copilot.loading")}</div>}
       <iframe
         src={COPILOT_CHAT_URL}
-        title="Μουσικοθεραπεία — Chat"
+        title={t("copilot.frameTitle")}
         className="copilot-frame"
         allow="clipboard-write; fullscreen"
         allowFullScreen
@@ -1080,6 +1088,7 @@ function MapFlyToTarget({ target }) {
 }
 
 function RouteLeafletMap({ selected, onSelect, onFreePick, flyTarget }) {
+  const { t, pn } = useLang();
   const isCustom = selected && !ROUTE_DESTINATIONS.some((d) => d.name === selected.name);
   return (
     <div className="route-leaflet-wrap">
@@ -1091,17 +1100,17 @@ function RouteLeafletMap({ selected, onSelect, onFreePick, flyTarget }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <RouteMapClickCatcher onPick={onFreePick} />
-        <Marker position={[ATHENS.lat, ATHENS.lon]} icon={makeRoutePinIcon("ΑΘΗΝΑ", false)} />
+        <Marker position={[ATHENS.lat, ATHENS.lon]} icon={makeRoutePinIcon(t("route.pin.athens"), false)} />
         {ROUTE_DESTINATIONS.map((d) => (
           <Marker
             key={d.name}
             position={[d.lat, d.lon]}
-            icon={makeRoutePinIcon(d.name, selected && selected.name === d.name)}
+            icon={makeRoutePinIcon(pn(d.name), selected && selected.name === d.name)}
             eventHandlers={{ click: () => onSelect(d) }}
           />
         ))}
         {isCustom && (
-          <Marker position={[selected.lat, selected.lon]} icon={makeRoutePinIcon(selected.resolving ? "…" : selected.name, true)} />
+          <Marker position={[selected.lat, selected.lon]} icon={makeRoutePinIcon(selected.resolving ? "…" : pn(selected.name), true)} />
         )}
       </MapContainer>
     </div>
@@ -1132,6 +1141,7 @@ async function searchPlaces(query) {
 // Search bar + map. `onSearchPick({ name, lat, lon, full })` is called when the
 // person picks a result; the existing click-on-map selection is unchanged.
 function RouteMapWithSearch({ selected, onSelect, onFreePick, onSearchPick }) {
+  const { t, pn } = useLang();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searchState, setSearchState] = useState("idle"); // idle | loading | done | error
@@ -1180,17 +1190,17 @@ function RouteMapWithSearch({ selected, onSelect, onFreePick, onSearchPick }) {
         <input
           type="search"
           className="route-search-input"
-          placeholder="Αναζήτησε προορισμό (π.χ. Μήλος, Ναύπλιο)"
+          placeholder={t("route.search.placeholder")}
           value={query}
           onChange={handleChange}
           maxLength={80}
-          aria-label="Αναζήτηση προορισμού"
+          aria-label={t("route.search.aria")}
         />
-        <button type="submit" className="route-search-btn" aria-label="Αναζήτηση">🔍</button>
+        <button type="submit" className="route-search-btn" aria-label={t("route.search.btn")}>🔍</button>
       </form>
-      {searchState === "loading" && <div className="route-search-note">Ψάχνουμε…</div>}
-      {searchState === "error" && <div className="route-search-note">Η αναζήτηση δεν είναι διαθέσιμη αυτή τη στιγμή — μπορείς να πατήσεις πάνω στον χάρτη.</div>}
-      {searchState === "done" && results.length === 0 && <div className="route-search-note">Δεν βρέθηκε αποτέλεσμα — δοκίμασε άλλη γραφή ή πάτα πάνω στον χάρτη.</div>}
+      {searchState === "loading" && <div className="route-search-note">{t("route.search.loading")}</div>}
+      {searchState === "error" && <div className="route-search-note">{t("route.search.error")}</div>}
+      {searchState === "done" && results.length === 0 && <div className="route-search-note">{t("route.search.empty")}</div>}
       {results.length > 0 && (
         <ul className="route-search-results">
           {results.map((r, i) => (
@@ -1233,6 +1243,7 @@ function makeVanIcon(facingEast) {
 }
 
 function RouteLeafletJourneyMap({ destination, mode, vanPct, routeCoords, routeStatus }) {
+  const { t, pn } = useLang();
   const origin = ATHENS;
   const hasRoad = routeCoords && routeCoords.length > 1;
   const pathCoords = hasRoad ? routeCoords : [[origin.lat, origin.lon], [destination.lat, destination.lon]];
@@ -1261,15 +1272,15 @@ function RouteLeafletJourneyMap({ destination, mode, vanPct, routeCoords, routeS
             ? { color: "#39ACD0", weight: 4, opacity: 0.9 }
             : { color: "#39ACD0", weight: 3, dashArray: "1,10", opacity: 0.85 }}
         />
-        <Marker position={[origin.lat, origin.lon]} icon={makeRoutePinIcon("ΑΘΗΝΑ", false)} />
-        <Marker position={[destination.lat, destination.lon]} icon={makeRoutePinIcon(destination.name, true)} />
+        <Marker position={[origin.lat, origin.lon]} icon={makeRoutePinIcon(t("route.pin.athens"), false)} />
+        <Marker position={[destination.lat, destination.lon]} icon={makeRoutePinIcon(pn(destination.name), true)} />
         {vanPos && <Marker position={vanPos} icon={makeVanIcon(vanFacingEast)} />}
       </MapContainer>
       {mode === "preview" && routeStatus === "loading" && (
-        <div className="route-map-badge">Υπολογίζουμε την οδική διαδρομή…</div>
+        <div className="route-map-badge">{t("route.calc")}</div>
       )}
       {mode === "preview" && routeStatus === "unavailable" && (
-        <div className="route-map-badge">Ενδεικτική διαδρομή — δεν βρέθηκε οδική σύνδεση (π.χ. νησί)</div>
+        <div className="route-map-badge">{t("route.indicative")}</div>
       )}
     </div>
   );
@@ -1416,7 +1427,8 @@ function getFerryInfo(destination) {
   }
   // Ionian islands sail on the Ionian; everything else we model is Aegean.
   const seaName = arrivalPort.lon < 21.5 ? "το Ιόνιο" : "το Αιγαίο";
-  return { islandName: island.name, departurePort, arrivalPort, seaName };
+  const sea = arrivalPort.lon < 21.5 ? "ionian" : "aegean";
+  return { islandName: island.name, departurePort, arrivalPort, seaName, sea };
 }
 function isSamePlace(a, b) {
   return Math.abs(a.lat - b.lat) < 0.01 && Math.abs(a.lon - b.lon) < 0.01;
@@ -1445,12 +1457,13 @@ function buildFerryLegs(destination, ferryInfo, routeCoords, routeCoords2, secon
   const legs = [];
   const leg1Ready = !!(routeCoords && routeCoords.length > 1);
   const leg1 = leg1Ready ? routeCoords : [[ATHENS.lat, ATHENS.lon], [ferryInfo.departurePort.lat, ferryInfo.departurePort.lon]];
-  legs.push({ kind: "road", coords: leg1, ready: leg1Ready, label: ferryInfo.departurePort.name });
+  legs.push({ kind: "road", coords: leg1, ready: leg1Ready, label: ferryInfo.departurePort.name, labelEn: placeLabel("en", ferryInfo.departurePort.name) });
   legs.push({
     kind: "ferry",
     coords: [[ferryInfo.departurePort.lat, ferryInfo.departurePort.lon], [ferryInfo.arrivalPort.lat, ferryInfo.arrivalPort.lon]],
     ready: true,
     label: ferryInfo.arrivalPort.name,
+    labelEn: placeLabel("en", ferryInfo.islandName) + " port",
   });
   if (secondLegNeeded) {
     const leg2Ready = !!(routeCoords2 && routeCoords2.length > 1);
@@ -1464,6 +1477,7 @@ function buildFerryLegs(destination, ferryInfo, routeCoords, routeCoords2, secon
 // dashed depending on whether the real route loaded, the sea crossing always
 // dashed) and animates a van or ferry icon along whichever leg is active.
 function RouteLeafletFerryMap({ legs, activeLegIndex, vanPct, badge }) {
+  const { t, lang } = useLang();
   const allCoords = legs.flatMap((l) => l.coords);
   const activeLeg = legs[activeLegIndex];
   const vanPos = activeLeg && vanPct != null ? pointAlongPath(activeLeg.coords, vanPct) : null;
@@ -1498,12 +1512,12 @@ function RouteLeafletFerryMap({ legs, activeLegIndex, vanPct, badge }) {
             }
           />
         ))}
-        <Marker position={legs[0].coords[0]} icon={makeRoutePinIcon("ΑΘΗΝΑ", false)} />
+        <Marker position={legs[0].coords[0]} icon={makeRoutePinIcon(t("route.pin.athens"), false)} />
         {legs.map((leg, i) => (
           <Marker
             key={"pin" + i}
             position={leg.coords[leg.coords.length - 1]}
-            icon={makeRoutePinIcon(leg.label, i === legs.length - 1)}
+            icon={makeRoutePinIcon(lang === "en" && leg.labelEn ? leg.labelEn : leg.label, i === legs.length - 1)}
           />
         ))}
         {vanPos && <Marker position={vanPos} icon={activeLeg.kind === "ferry" ? makeFerryIcon(vanFacingEast) : makeVanIcon(vanFacingEast)} />}
@@ -1532,6 +1546,7 @@ async function reverseGeocodePlace(lat, lon) {
 }
 
 function RouteMapBoard({ selected, onSelect, onFreePick, mode, vanPct }) {
+  const { t, pn } = useLang();
   const dest = selected ? projectLatLon(selected.lat, selected.lon) : null;
   const origin = projectLatLon(ATHENS.lat, ATHENS.lon);
   const vanPos = dest && mode === "driving"
@@ -1557,7 +1572,7 @@ function RouteMapBoard({ selected, onSelect, onFreePick, mode, vanPct }) {
       )}
       <div className="route-pin route-pin-origin" style={{ left: `${origin.left}%`, top: `${origin.top}%` }}>
         <span className="route-pin-dot" />
-        <span className="route-pin-label">ΑΘΗΝΑ</span>
+        <span className="route-pin-label">{t("route.pin.athens")}</span>
       </div>
       {mode === "pick" && ROUTE_DESTINATIONS.map((d) => {
         const pos = projectLatLon(d.lat, d.lon);
@@ -1577,7 +1592,7 @@ function RouteMapBoard({ selected, onSelect, onFreePick, mode, vanPct }) {
       {mode === "pick" && selected && dest && !ROUTE_DESTINATIONS.some((d) => d.name === selected.name) && (
         <div className="route-pin route-pin-active route-pin-custom" style={{ left: `${dest.left}%`, top: `${dest.top}%` }}>
           <MapPin size={16} strokeWidth={2.3} />
-          <span className="route-pin-label">{selected.resolving ? "…" : selected.name}</span>
+          <span className="route-pin-label">{selected.resolving ? "…" : pn(selected.name)}</span>
         </div>
       )}
       {mode !== "pick" && dest && (
@@ -1594,14 +1609,15 @@ function RouteMapBoard({ selected, onSelect, onFreePick, mode, vanPct }) {
 }
 
 function RouteStepper({ step }) {
+  const { t } = useLang();
   const idx = ROUTE_STEP_INDEX[step];
   if (idx === undefined) return null;
   return (
     <div className="route-stepper">
-      {ROUTE_STEP_LABELS.map((label, i) => (
-        <React.Fragment key={label}>
+      {ROUTE_STEP_LABELS.map((_l, i) => (
+        <React.Fragment key={i}>
           <span className={`route-step ${i === idx ? "route-step-active" : i < idx ? "route-step-done" : ""}`}>
-            {String(i + 1).padStart(2, "0")} {label}
+            {String(i + 1).padStart(2, "0")} {t("route.step." + i)}
           </span>
           {i < ROUTE_STEP_LABELS.length - 1 && <span className="route-step-arrow">→</span>}
         </React.Fragment>
@@ -1638,6 +1654,8 @@ function prefersReducedMotion() {
 }
 
 function PickRouteView() {
+  const { t, pn, lang } = useLang();
+  const genreLabel = (g) => (g === ROUTE_GENRES[ROUTE_GENRES.length - 1] ? t("genre.decide") : (lang === "en" && (("genre." + g) in DICT.en)) ? t("genre." + g) : g);
   const [step, setStep] = useState("intro");
   const [destination, setDestination] = useState(null);
   const [genre, setGenre] = useState(null);
@@ -1811,7 +1829,7 @@ function PickRouteView() {
 
   function launch() {
     if (!canSubmitRoute()) {
-      setBlockedMsg("Το Van μόλις γύρισε από μια διαδρομή — δώσε του κάνα-δυο λεπτά ανάσα και δοκίμασε ξανά. 🚐");
+      setBlockedMsg(t("route.blocked"));
       return;
     }
     setBlockedMsg("");
@@ -1828,29 +1846,29 @@ function PickRouteView() {
       {step === "intro" && (
         <div className="route-intro fade-in">
           <div className="eyebrow">PICK THE ROUTE 🚐</div>
-          <h1 className="page-title">Εσύ αποφασίζεις τη διαδρομή.</h1>
+          <h1 className="page-title">{t("route.title")}</h1>
           <p className="route-intro-text">
-            Διάλεξε έναν προορισμό, ένα μουσικό ύφος και το τραγούδι που θέλεις να πάρουμε μαζί μας. Το Van είναι έτοιμο.
+            {t("route.intro")}
           </p>
-          <button className="pill-btn" onClick={() => setStep("destination")}>Ξεκίνα τη διαδρομή</button>
+          <button className="pill-btn" onClick={() => setStep("destination")}>{t("route.start")}</button>
         </div>
       )}
 
       {step === "destination" && (
         <div className="fade-in">
           <RouteStepper step={step} />
-          <div className="route-step-heading">📍 ΠΟΥ ΠΑΜΕ;</div>
-          <p className="route-intro-text">Ψάξε έναν προορισμό, ή κάνε zoom, μετακίνησε τον χάρτη και πάτα οπουδήποτε — ή διάλεξε έναν δημοφιλή προορισμό.</p>
+          <div className="route-step-heading">{t("route.where")}</div>
+          <p className="route-intro-text">{t("route.whereText")}</p>
           <RouteMapWithSearch selected={destination} onSelect={setDestination} onFreePick={handleFreePick} onSearchPick={(p) => setDestination({ name: p.name, lat: p.lat, lon: p.lon })} />
           {destination && (
             <div className="route-confirm-line">
-              📍 {destination.resolving ? "Εντοπίζουμε το σημείο..." : destination.name}
-              <br /><span>Η στάση σου προστέθηκε στη διαδρομή.</span>
-              {getFerryInfo(destination) && <><br /><span>⛴️ Αυτός ο προορισμός έχει και κομμάτι με πλοίο.</span></>}
+              📍 {destination.resolving ? t("route.locating") : pn(destination.name)}
+              <br /><span>{t("route.stopAdded")}</span>
+              {getFerryInfo(destination) && <><br /><span>{t("route.hasFerry")}</span></>}
             </div>
           )}
           <div className="route-nav">
-            <button className="pill-btn" disabled={!destination} onClick={() => setStep("genre")}>Συνέχεια</button>
+            <button className="pill-btn" disabled={!destination} onClick={() => setStep("genre")}>{t("route.continue")}</button>
           </div>
         </div>
       )}
@@ -1858,7 +1876,7 @@ function PickRouteView() {
       {step === "genre" && (
         <div className="fade-in">
           <RouteStepper step={step} />
-          <div className="route-step-heading">🎵 ΤΙ ΑΚΟΥΜΕ ΣΤΟΝ ΔΡΟΜΟ;</div>
+          <div className="route-step-heading">{t("route.genreHeading")}</div>
           <div className="route-genre-grid">
             {ROUTE_GENRES.map((g) => (
               <button
@@ -1866,13 +1884,13 @@ function PickRouteView() {
                 className={`route-genre-card ${genre === g ? "route-genre-active" : ""}`}
                 onClick={() => setGenre(g)}
               >
-                {g}
+                {genreLabel(g)}
               </button>
             ))}
           </div>
           <div className="route-nav">
-            <button className="pill-btn pill-btn-ghost" onClick={() => setStep("destination")}>Πίσω</button>
-            <button className="pill-btn" disabled={!genre} onClick={() => setStep("song")}>Συνέχεια</button>
+            <button className="pill-btn pill-btn-ghost" onClick={() => setStep("destination")}>{t("route.back")}</button>
+            <button className="pill-btn" disabled={!genre} onClick={() => setStep("song")}>{t("route.continue")}</button>
           </div>
         </div>
       )}
@@ -1880,18 +1898,18 @@ function PickRouteView() {
       {step === "song" && (
         <div className="fade-in">
           <RouteStepper step={step} />
-          <div className="route-step-heading">🎧 ΤΙ ΠΑΙΡΝΟΥΜΕ ΜΑΖΙ ΜΑΣ;</div>
-          <label className="route-field-label">Το όνομά σου *</label>
-          <input className="route-input" placeholder="Πώς σε λένε;" value={userName} onChange={(e) => setUserName(e.target.value)} maxLength={60} />
-          <p className="route-intro-text">Ποιο τραγούδι πρέπει να ακούσουμε όταν φτάσουμε εκεί;</p>
-          <input className="route-input" placeholder="Π.χ. Τίτλος τραγουδιού" value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
-          <input className="route-input" placeholder="Π.χ. Καλλιτέχνης" value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={80} />
-          <input className="route-input" placeholder="Βάλε το link του τραγουδιού (προαιρετικό)" value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
-          <div className="route-step-heading route-step-heading-sm">💬 ΓΙΑΤΙ ΑΥΤΟ ΤΟ ΤΡΑΓΟΥΔΙ;</div>
-          <textarea className="route-textarea" placeholder="Μια μικρή ιστορία, μια ανάμνηση ή ένας λόγος που το διάλεξες..." value={story} onChange={(e) => setStory(e.target.value)} maxLength={500} />
+          <div className="route-step-heading">{t("route.songHeading")}</div>
+          <label className="route-field-label">{t("route.nameLabel")}</label>
+          <input className="route-input" placeholder={t("route.namePh")} value={userName} onChange={(e) => setUserName(e.target.value)} maxLength={60} />
+          <p className="route-intro-text">{t("route.songAsk")}</p>
+          <input className="route-input" placeholder={t("route.songTitlePh")} value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
+          <input className="route-input" placeholder={t("route.artistPh")} value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={80} />
+          <input className="route-input" placeholder={t("route.linkPh")} value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
+          <div className="route-step-heading route-step-heading-sm">{t("route.whySong")}</div>
+          <textarea className="route-textarea" placeholder={t("route.storyPh")} value={story} onChange={(e) => setStory(e.target.value)} maxLength={500} />
           <div className="route-nav">
-            <button className="pill-btn pill-btn-ghost" onClick={() => setStep("genre")}>Πίσω</button>
-            <button className="pill-btn" disabled={!canProceedSong} onClick={() => setStep("preview")}>Συνέχεια</button>
+            <button className="pill-btn pill-btn-ghost" onClick={() => setStep("genre")}>{t("route.back")}</button>
+            <button className="pill-btn" disabled={!canProceedSong} onClick={() => setStep("preview")}>{t("route.continue")}</button>
           </div>
         </div>
       )}
@@ -1899,95 +1917,95 @@ function PickRouteView() {
       {step === "preview" && (
         <div className="fade-in">
           <RouteStepper step={step} />
-          <div className="route-step-heading">Η ΔΙΑΔΡΟΜΗ ΣΟΥ</div>
+          <div className="route-step-heading">{t("route.yourRoute")}</div>
           {ferryInfo ? (
             <>
               <RouteLeafletFerryMap
                 legs={ferryLegs}
                 activeLegIndex={0}
                 vanPct={null}
-                badge={`Αθήνα → ${ferryInfo.departurePort.name} (οδικώς) → ${ferryInfo.arrivalPort.name} (πλοίο) → ${destination.name}`}
+                badge={t("route.ferryBadge", { dep: pn(ferryInfo.departurePort.name), arr: lang === "en" ? placeLabel("en", ferryInfo.islandName) + " port" : ferryInfo.arrivalPort.name, dest: pn(destination.name) })}
               />
-              <p className="route-ferry-note">⛴️ Το κομμάτι με το πλοίο είναι ενδεικτικό — δεν δείχνει πραγματικό δρομολόγιο ή ζωντανή θέση πλοίου.</p>
+              <p className="route-ferry-note">{t("route.ferryNote")}</p>
             </>
           ) : (
             <RouteLeafletJourneyMap destination={destination} mode="preview" vanPct={0} routeCoords={routeCoords} routeStatus={routeStatus} />
           )}
           <div className="route-preview-card">
-            <div>👤 Όνομα: <strong>{userName.trim()}</strong></div>
-            <div>📍 Προορισμός: <strong>{destination.name}</strong></div>
-            <div>🎵 Ύφος: <strong>{genre}</strong></div>
-            <div>🎧 Soundtrack: <strong>{songTitle} — {artist}</strong></div>
+            <div>{t("route.sum.name")} <strong>{userName.trim()}</strong></div>
+            <div>{t("route.sum.dest")} <strong>{pn(destination.name)}</strong></div>
+            <div>{t("route.sum.genre")} <strong>{genreLabel(genre)}</strong></div>
+            <div>{t("route.sum.song")} <strong>{songTitle} — {artist}</strong></div>
           </div>
           {blockedMsg && <div className="route-blocked-msg">{blockedMsg}</div>}
           <div className="route-nav route-nav-center">
-            <button className="pill-btn pill-btn-ghost" onClick={() => setStep("song")}>Πίσω</button>
-            <button className="pill-btn route-launch-btn" onClick={launch}>ΒΑΛΕ ΜΠΡΟΣ 🚐</button>
+            <button className="pill-btn pill-btn-ghost" onClick={() => setStep("song")}>{t("route.back")}</button>
+            <button className="pill-btn route-launch-btn" onClick={launch}>{t("route.go")}</button>
           </div>
-          <p className="route-intro-text route-intro-text-center">Η διαδρομή ξεκινάει.</p>
+          <p className="route-intro-text route-intro-text-center">{t("route.starting")}</p>
         </div>
       )}
 
       {step === "driving" && (
         <div className="fade-in route-driving">
-          <div className="route-step-heading route-step-heading-center">Η διαδρομή ξεκινάει...</div>
+          <div className="route-step-heading route-step-heading-center">{t("route.startingDots")}</div>
           <RouteLeafletJourneyMap destination={destination} mode="driving" vanPct={vanPct} routeCoords={routeCoords} />
         </div>
       )}
 
       {step === "preparing" && (
         <div className="fade-in route-driving">
-          <div className="route-ferry-message">Ετοιμάζουμε τη διαδρομή… 🚐</div>
+          <div className="route-ferry-message">{t("route.preparing")}</div>
         </div>
       )}
 
       {step === "driving_to_port" && ferryInfo && (
         <div className="fade-in route-driving">
-          <div className="route-step-heading route-step-heading-center">Προς το λιμάνι, {ferryInfo.departurePort.name}...</div>
+          <div className="route-step-heading route-step-heading-center">{t("route.toPort", { port: pn(ferryInfo.departurePort.name) })}</div>
           <RouteLeafletFerryMap legs={ferryLegs} activeLegIndex={0} vanPct={vanPct} />
         </div>
       )}
 
       {step === "boarding_ferry" && (
         <div className="fade-in route-driving">
-          <div className="route-ferry-message">Λύνουμε κάβους… ⛴️</div>
+          <div className="route-ferry-message">{t("route.casting")}</div>
         </div>
       )}
 
       {step === "ferry_crossing" && ferryInfo && (
         <div className="fade-in route-driving">
-          <div className="route-step-heading route-step-heading-center">Διασχίζουμε {ferryInfo.seaName}… ⛴️</div>
+          <div className="route-step-heading route-step-heading-center">{t("route.crossing", { sea: t("sea." + ferryInfo.sea) })}</div>
           <RouteLeafletFerryMap
             legs={ferryLegs}
             activeLegIndex={1}
             vanPct={vanPct}
-            badge="Ενδεικτική διαδρομή — όχι πραγματικό δρομολόγιο ή ζωντανή θέση πλοίου"
+            badge={t("route.crossingBadge")}
           />
         </div>
       )}
 
       {step === "disembarking" && (
         <div className="fade-in route-driving">
-          <div className="route-ferry-message">Αράξαμε στο λιμάνι… 🚢</div>
+          <div className="route-ferry-message">{t("route.docked")}</div>
         </div>
       )}
 
       {step === "driving_to_destination" && ferryInfo && (
         <div className="fade-in route-driving">
-          <div className="route-step-heading route-step-heading-center">Τελευταίο κομμάτι μέχρι το {destination.name}...</div>
+          <div className="route-step-heading route-step-heading-center">{t("route.lastLeg", { dest: pn(destination.name) })}</div>
           <RouteLeafletFerryMap legs={ferryLegs} activeLegIndex={2} vanPct={vanPct} />
         </div>
       )}
 
       {step === "arrived" && (
         <div className="fade-in route-arrived">
-          <div className="route-step-heading route-step-heading-center">ΕΦΤΑΣΕΣ. 📍</div>
+          <div className="route-step-heading route-step-heading-center">{t("route.arrived")}</div>
           <div className="route-arrived-dest">{destination.name}</div>
-          <div className="route-arrived-song">🎵 Το soundtrack σου:<br /><strong>{artist} — {songTitle}</strong></div>
-          <div className="route-arrived-note">Η ΔΙΑΔΡΟΜΗ ΣΟΥ ΜΠΗΚΕ ΣΤΗ ΛΙΣΤΑ ΜΑΣ.</div>
-          <p className="route-intro-text route-intro-text-center">Ίσως μια μέρα το Van να περάσει πραγματικά από εδώ.</p>
+          <div className="route-arrived-song">{t("route.arrivedSong")}<br /><strong>{artist} — {songTitle}</strong></div>
+          <div className="route-arrived-note">{t("route.arrivedNote")}</div>
+          <p className="route-intro-text route-intro-text-center">{t("route.arrivedMaybe")}</p>
           <div className="route-nav route-nav-center">
-            <button className="pill-btn" onClick={reset}>Διάλεξε άλλη διαδρομή</button>
+            <button className="pill-btn" onClick={reset}>{t("route.another")}</button>
           </div>
         </div>
       )}
@@ -2026,25 +2044,16 @@ function markPostcardSubmitted() {
 }
 // Maps the server's error codes (AppWebhookScript.gs.txt) to friendly Greek
 // messages — never a raw error code shown to the person.
-const POSTCARD_ERROR_MESSAGES = {
-  "consent-required": "Χρειάζεται να επιλέξεις τη συγκατάθεση δημοσίευσης για να στείλεις την καρτ ποστάλ.",
-  "missing-fields": "Λείπει κάποιο υποχρεωτικό πεδίο — έλεγξε τη φόρμα και δοκίμασε ξανά.",
-  "photo-required": "Χρειάζεται μια φωτογραφία για να σταλεί η καρτ ποστάλ.",
-  "invalid-photo-type": "Αυτός ο τύπος αρχείου δεν υποστηρίζεται — δοκίμασε jpg, png, webp ή gif.",
-  "photo-too-large": "Η φωτογραφία είναι πολύ μεγάλη — δοκίμασε μικρότερη.",
-  "photo-upload-failed": "Η φωτογραφία δεν αποθηκεύτηκε — δοκίμασε ξανά σε λίγο.",
-  "rate-limited": "Πολλές υποβολές αυτή τη στιγμή — δοκίμασε ξανά σε λίγα λεπτά.",
-  "invalid-request": "Κάτι δεν πήγε καλά με την υποβολή — δοκίμασε ξανά.",
-  "webhook-not-configured": "Η αποθήκευση δεν έχει ρυθμιστεί ακόμα — δοκίμασε ξανά σε λίγο.",
-};
-function postcardErrorMessage(code) {
-  return POSTCARD_ERROR_MESSAGES[code] || "Κάτι δεν πήγε καλά και η καρτ ποστάλ δεν στάλθηκε. Τα στοιχεία σου παραμένουν εδώ — δοκίμασε ξανά.";
+const POSTCARD_ERROR_CODES = ["consent-required", "missing-fields", "photo-required", "invalid-photo-type", "photo-too-large", "photo-upload-failed", "rate-limited", "invalid-request", "webhook-not-configured"];
+
+function postcardErrorMessage(code, t) {
+  return POSTCARD_ERROR_CODES.indexOf(code) !== -1 ? t("pc.err." + code) : t("pc.err.default");
 }
 
-function validatePostcardPhoto(file) {
-  if (!file) return "Διάλεξε μια φωτογραφία.";
-  if (!file.type || !file.type.startsWith("image/")) return "Το αρχείο πρέπει να είναι φωτογραφία (jpg, png κ.λπ.).";
-  if (file.size > POSTCARD_MAX_FILE_BYTES) return "Η φωτογραφία είναι πολύ μεγάλη (μέγιστο 10MB).";
+function validatePostcardPhoto(file, t) {
+  if (!file) return t("pc.photo.choose");
+  if (!file.type || !file.type.startsWith("image/")) return t("pc.photo.notImage");
+  if (file.size > POSTCARD_MAX_FILE_BYTES) return t("pc.photo.tooBig");
   return null;
 }
 
@@ -2081,6 +2090,7 @@ function resizePostcardPhoto(file) {
 }
 
 function PostcardsView() {
+  const { t, pn } = useLang();
   const [pickedPoint, setPickedPoint] = useState(null); // real coords from search or map click — never invented
   const [story, setStory] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -2100,7 +2110,7 @@ function PostcardsView() {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
-    const err = validatePostcardPhoto(file);
+    const err = validatePostcardPhoto(file, t);
     if (err) {
       setPhotoError(err);
       return;
@@ -2131,7 +2141,7 @@ function PostcardsView() {
   async function handleSubmit() {
     if (!canSubmit) return;
     if (!canSubmitPostcard()) {
-      setBlockedMsg("Μόλις έστειλες μια καρτ ποστάλ — δώσε κάνα-δυο λεπτά και δοκίμασε ξανά. 💌");
+      setBlockedMsg(t("pc.blocked"));
       return;
     }
     setBlockedMsg("");
@@ -2203,7 +2213,7 @@ function PostcardsView() {
     } catch (err) {
       console.error("Postcard submission failed:", err);
       setStatus("error");
-      setErrorMsg(postcardErrorMessage(err && err.message));
+      setErrorMsg(postcardErrorMessage(err && err.message, t));
     }
   }
 
@@ -2218,10 +2228,10 @@ function PostcardsView() {
     return (
       <div className="view fade-in postcard-success">
         <div className="postcard-success-icon"><CheckCircle2 size={44} strokeWidth={1.6} /></div>
-        <h1 className="page-title center">Η καρτ ποστάλ σου έφτασε!</h1>
-        <p className="route-intro-text route-intro-text-center">Θα την ελέγξουμε πριν γίνει μέρος των διαδρομών μας.</p>
+        <h1 className="page-title center">{t("pc.sent.title")}</h1>
+        <p className="route-intro-text route-intro-text-center">{t("pc.sent.text")}</p>
         <div className="route-nav route-nav-center">
-          <button className="pill-btn" onClick={resetForNew}>Στείλε άλλη καρτ ποστάλ</button>
+          <button className="pill-btn" onClick={resetForNew}>{t("pc.sent.another")}</button>
         </div>
       </div>
     );
@@ -2230,51 +2240,51 @@ function PostcardsView() {
   return (
     <div className="view fade-in">
       <div className="eyebrow">POSTCARDS FROM THE ROAD 💌</div>
-      <h1 className="page-title">Μια καρτ ποστάλ από τον δρόμο.</h1>
+      <h1 className="page-title">{t("pc.title")}</h1>
       <p className="route-intro-text">
-        Κάθε τόπος κρύβει μια ιστορία. Μοιράσου μαζί μας ένα μέρος που αγαπάς, μια ανάμνηση που κουβαλάς ή μια στιγμή που θα ήθελες να ταξιδέψει λίγο πιο μακριά.
+        {t("pc.intro")}
       </p>
 
-      <label className="route-field-label">Το όνομά σου *</label>
-      <input className="route-input" placeholder="Πώς σε λένε;" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={60} />
+      <label className="route-field-label">{t("route.nameLabel")}</label>
+      <input className="route-input" placeholder={t("route.namePh")} value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={60} />
 
-      <label className="route-field-label">Ο τόπος της καρτ ποστάλ *</label>
-      <p className="route-intro-text">Ψάξε το μέρος στη μπάρα αναζήτησης ή πάτα πάνω στον χάρτη.</p>
+      <label className="route-field-label">{t("pc.placeLabel")}</label>
+      <p className="route-intro-text">{t("pc.placeHelp")}</p>
       <RouteMapWithSearch selected={pickedPoint} onSelect={setPickedPoint} onFreePick={handleFreePick} onSearchPick={setPickedPoint} />
       {pickedPoint && (
-        <div className="route-confirm-line">📍 {pickedPoint.resolving ? "Εντοπίζουμε το σημείο..." : pickedPoint.name}</div>
+        <div className="route-confirm-line">📍 {pickedPoint.resolving ? t("route.locating") : pn(pickedPoint.name)}</div>
       )}
 
-      <label className="route-field-label">Η ιστορία σου *</label>
-      <textarea className="route-textarea" placeholder="Μια ανάμνηση, μια στιγμή, μια μικρή ιστορία για αυτό το μέρος..." value={story} onChange={(e) => setStory(e.target.value)} maxLength={1000} />
+      <label className="route-field-label">{t("pc.storyLabel")}</label>
+      <textarea className="route-textarea" placeholder={t("pc.storyPh")} value={story} onChange={(e) => setStory(e.target.value)} maxLength={1000} />
 
-      <label className="route-field-label">Φωτογραφία *</label>
+      <label className="route-field-label">{t("pc.photoLabel")}</label>
       <input ref={fileInputRef} type="file" accept="image/*" className="postcard-file-input" onChange={handlePhotoChange} />
       {!photoPreview && (
         <button type="button" className="postcard-upload-btn" onClick={() => fileInputRef.current && fileInputRef.current.click()}>
-          <Upload size={18} strokeWidth={1.8} /> Ανέβασε φωτογραφία
+          <Upload size={18} strokeWidth={1.8} /> {t("pc.upload")}
         </button>
       )}
       {photoPreview && (
         <div className="postcard-preview-wrap">
-          <img src={photoPreview} alt="Προεπισκόπηση" className="postcard-preview-img" />
+          <img src={photoPreview} alt={t("pc.preview")} className="postcard-preview-img" />
           <div className="postcard-preview-actions">
-            <button type="button" className="pill-btn pill-btn-ghost pill-btn-sm" onClick={() => fileInputRef.current && fileInputRef.current.click()}>Αντικατάσταση</button>
-            <button type="button" className="pill-btn pill-btn-ghost pill-btn-sm" onClick={removePhoto}>Αφαίρεση</button>
+            <button type="button" className="pill-btn pill-btn-ghost pill-btn-sm" onClick={() => fileInputRef.current && fileInputRef.current.click()}>{t("pc.replace")}</button>
+            <button type="button" className="pill-btn pill-btn-ghost pill-btn-sm" onClick={removePhoto}>{t("pc.remove")}</button>
           </div>
         </div>
       )}
       {photoError && <div className="route-blocked-msg">{photoError}</div>}
 
       <div className="postcard-divider" />
-      <div className="route-step-heading route-step-heading-sm">🎵 ΠΡΟΑΙΡΕΤΙΚΑ</div>
-      <input className="route-input" placeholder="Τίτλος τραγουδιού" value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
-      <input className="route-input" placeholder="Καλλιτέχνης" value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={80} />
-      <input className="route-input" placeholder="Σύνδεσμος τραγουδιού" value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
+      <div className="route-step-heading route-step-heading-sm">{t("pc.optional")}</div>
+      <input className="route-input" placeholder={t("pc.songTitlePh")} value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
+      <input className="route-input" placeholder={t("pc.artistPh")} value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={80} />
+      <input className="route-input" placeholder={t("pc.linkPh")} value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
 
       <label className="postcard-consent">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-        <span>Συμφωνώ να δημοσιευτούν η ιστορία και η φωτογραφία μου στο The Van, μετά από έλεγχο. *</span>
+        <span>{t("pc.consent")}</span>
       </label>
 
       {blockedMsg && <div className="route-blocked-msg">{blockedMsg}</div>}
@@ -2282,7 +2292,7 @@ function PostcardsView() {
 
       <div className="route-nav route-nav-center">
         <button className="pill-btn route-launch-btn" disabled={!canSubmit || status === "submitting"} onClick={handleSubmit}>
-          {status === "submitting" ? "Στέλνεται..." : "Στείλε την καρτ ποστάλ σου"}
+          {status === "submitting" ? t("pc.sending") : t("pc.send")}
         </button>
       </div>
     </div>
@@ -2291,6 +2301,7 @@ function PostcardsView() {
 
 // ---- VAN ATLAS 🗺️ (brief section 7) ----
 function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
+  const { t } = useLang();
   const hasSong = !!(entry.songTitle || entry.artist);
   if (entry.kind === "route") {
     const songId = `route-${entry.id}`;
@@ -2302,13 +2313,13 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
         {hasSong && <div className="atlas-entry-song">🎵 {entry.songTitle}{entry.artist ? ` — ${entry.artist}` : ""}</div>}
         {entry.story && <div className="atlas-entry-story">{entry.story}</div>}
         <div className="atlas-entry-actions">
-          {entry.musicUrl && <a className="atlas-entry-link" href={entry.musicUrl} target="_blank" rel="noreferrer">Άκου το τραγούδι ↗</a>}
+          {entry.musicUrl && <a className="atlas-entry-link" href={entry.musicUrl} target="_blank" rel="noreferrer">{t("atlas.listen")}</a>}
           {hasSong && (
             <button
               className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
               onClick={() => onSaveSong({ id: songId, title: entry.songTitle, artist: entry.artist, musicUrl: entry.musicUrl, placeName: entry.placeName })}
             >
-              {saved ? "✓ Στο My Van" : "+ My Van"}
+              {saved ? t("atlas.inMyVan") : "+ My Van"}
             </button>
           )}
         </div>
@@ -2324,12 +2335,12 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
       {hasSong && <div className="atlas-entry-song">🎵 {entry.songTitle}{entry.artist ? ` — ${entry.artist}` : ""}</div>}
       {entry.displayName && <div className="atlas-entry-byline">— {entry.displayName}</div>}
       <div className="atlas-entry-actions">
-        {entry.musicUrl && <a className="atlas-entry-link" href={entry.musicUrl} target="_blank" rel="noreferrer">Άκου το τραγούδι ↗</a>}
+        {entry.musicUrl && <a className="atlas-entry-link" href={entry.musicUrl} target="_blank" rel="noreferrer">{t("atlas.listen")}</a>}
         <button
           className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
           onClick={() => onSavePostcard({ id: entry.id, placeName: entry.placeName, story: entry.story, photoUrl: entry.photoUrl })}
         >
-          {saved ? "✓ Στο My Van" : "+ My Van"}
+          {saved ? t("atlas.inMyVan") : "+ My Van"}
         </button>
       </div>
     </div>
@@ -2390,6 +2401,7 @@ function makeAtlasClusterIcon(total, label, active) {
 }
 
 function AtlasClusterLayer({ groups, activeGroups, onSelect }) {
+  const { t } = useLang();
   const map = useMap();
   const [zoom, setZoom] = useState(() => map.getZoom());
   useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
@@ -2401,7 +2413,7 @@ function AtlasClusterLayer({ groups, activeGroups, onSelect }) {
         const active = !!activeGroups && c.groups.some((g) => activeGroups.includes(g));
         return {
           c,
-          title: single ? `${c.groups[0].name} · ${c.total}` : `${c.total} καταχωρίσεις`,
+          title: single ? `${c.groups[0].name} · ${c.total}` : t("atlas.entriesN", { n: c.total }),
           icon: makeAtlasClusterIcon(c.total, single && zoom >= 7 ? c.groups[0].name : "", active),
         };
       }),
@@ -2425,6 +2437,7 @@ function AtlasClusterLayer({ groups, activeGroups, onSelect }) {
 }
 
 function VanAtlasView({ myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
+  const { t } = useLang();
   const [status, setStatus] = useState("loading"); // loading | ready | error
   const [groups, setGroups] = useState([]);
   const [textOnly, setTextOnly] = useState([]);
@@ -2462,14 +2475,14 @@ function VanAtlasView({ myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }
   return (
     <div className="view fade-in">
       <div className="eyebrow">VAN ATLAS 🗺️</div>
-      <h1 className="page-title">Οι τόποι της κοινότητας.</h1>
+      <h1 className="page-title">{t("atlas.title")}</h1>
       <p className="route-intro-text">
-        Τραγούδια, διαδρομές και ιστορίες που μοιράστηκε μαζί μας η κοινότητα — εκεί ακριβώς όπου τα τοποθέτησαν.
+        {t("atlas.intro")}
       </p>
       <PromotionSlot placement="ATLAS_FEATURED" variant="strip" />
 
-      {status === "loading" && <div className="route-map-badge-standalone">Φορτώνουμε τον χάρτη της κοινότητας...</div>}
-      {status === "error" && <div className="route-blocked-msg">Δεν μπορέσαμε να φορτώσουμε τον Van Atlas αυτή τη στιγμή. Δοκίμασε ξανά σε λίγο.</div>}
+      {status === "loading" && <div className="route-map-badge-standalone">{t("atlas.loading")}</div>}
+      {status === "error" && <div className="route-blocked-msg">{t("atlas.error")}</div>}
 
       {status === "ready" && (
         <>
@@ -2485,15 +2498,15 @@ function VanAtlasView({ myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }
           </div>
           {groups.length > 0 && (
             <div className="atlas-count-note">
-              {groups.reduce((n, g) => n + g.entries.length, 0)} καταχωρίσεις στον χάρτη — πάτα έναν κύκλο για να ζουμάρεις ή να δεις τι κρύβει.
+              {t("atlas.count", { n: groups.reduce((n, g) => n + g.entries.length, 0) })}
             </div>
           )}
 
           {isEmpty && (
             <div className="empty-state">
               <div className="empty-icon-circle"><MapIcon size={30} strokeWidth={1.8} /></div>
-              <div className="empty-title">Δεν υπάρχουν ακόμα καταχωρίσεις</div>
-              <div className="empty-sub">Μόλις η κοινότητα διαλέξει διαδρομές ή στείλει καρτ ποστάλ, θα εμφανιστούν εδώ.</div>
+              <div className="empty-title">{t("atlas.empty.title")}</div>
+              <div className="empty-sub">{t("atlas.empty.sub")}</div>
             </div>
           )}
 
@@ -2521,7 +2534,7 @@ function VanAtlasView({ myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }
                 })}
                 {total > panelLimit && (
                   <button type="button" className="postcard-map-toggle" onClick={() => setPanelLimit((n) => n + 30)}>
-                    Δες περισσότερες ({total - panelLimit} ακόμα)
+                    {t("atlas.more", { n: total - panelLimit })}
                   </button>
                 )}
               </div>
@@ -2530,14 +2543,14 @@ function VanAtlasView({ myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }
 
           {!activeGroups && !showTextOnly && textOnly.length > 0 && (
             <button type="button" className="postcard-map-toggle" onClick={() => setShowTextOnly(true)}>
-              📍 Δες {textOnly.length} ακόμα {textOnly.length === 1 ? "καταχώριση" : "καταχωρίσεις"} χωρίς σημείο στον χάρτη
+              {t(textOnly.length === 1 ? "atlas.textOnlyOne" : "atlas.textOnlyMany", { n: textOnly.length })}
             </button>
           )}
           {showTextOnly && textOnly.length > 0 && (
             <>
               <div className="route-step-heading route-step-heading-sm atlas-textonly-heading">
-                Χωρίς σημείο στον χάρτη (η τοποθεσία δόθηκε ως κείμενο)
-                <button type="button" className="atlas-textonly-hide" onClick={() => setShowTextOnly(false)}>Απόκρυψη</button>
+                {t("atlas.textOnlyHeading")}
+                <button type="button" className="atlas-textonly-hide" onClick={() => setShowTextOnly(false)}>{t("atlas.hide")}</button>
               </div>
               {textOnly.map((e, i) => (
                 <div key={i}>

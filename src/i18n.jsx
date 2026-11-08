@@ -7,6 +7,8 @@
 // half-translated screen can never show an empty label.
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
+import { SCREENS_EL, SCREENS_EN, PLACE_EN } from "./i18n-screens.js";
+
 const LS_KEY = "tvr_lang";
 
 export const DICT = {
@@ -96,11 +98,27 @@ export const DICT = {
   },
 };
 
-export function translate(lang, key) {
+Object.assign(DICT.el, SCREENS_EL);
+Object.assign(DICT.en, SCREENS_EN);
+
+function fill(str, vars) {
+  if (!vars) return str;
+  return str.replace(/\{(\w+)\}/g, (m, k) => (Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : m));
+}
+
+// translate(lang, key, vars?) — missing key in a language falls back to Greek, then to the key.
+export function translate(lang, key, vars) {
   const d = DICT[lang] || DICT.el;
-  if (Object.prototype.hasOwnProperty.call(d, key)) return d[key];
-  if (Object.prototype.hasOwnProperty.call(DICT.el, key)) return DICT.el[key];
+  if (Object.prototype.hasOwnProperty.call(d, key)) return fill(d[key], vars);
+  if (Object.prototype.hasOwnProperty.call(DICT.el, key)) return fill(DICT.el[key], vars);
   return key;
+}
+
+// Display-only place name (stored/submitted values stay Greek).
+export function placeLabel(lang, name) {
+  if (lang !== "en" || !name) return name;
+  if (PLACE_EN[name]) return PLACE_EN[name];
+  return String(name).replace(/^Σημείο \(/, "Point (");
 }
 
 function readStoredLang() {
@@ -111,7 +129,7 @@ function readStoredLang() {
   return "el"; // default: existing behaviour, Greek
 }
 
-const LangContext = createContext({ lang: "el", setLang: () => {}, toggleLang: () => {}, t: (k) => translate("el", k) });
+const LangContext = createContext({ lang: "el", setLang: () => {}, toggleLang: () => {}, t: (k, v) => translate("el", k, v), pn: (n) => n });
 
 export function LangProvider({ children }) {
   const [lang, setLangState] = useState(() => (typeof window !== "undefined" ? readStoredLang() : "el"));
@@ -124,7 +142,7 @@ export function LangProvider({ children }) {
   useEffect(() => {
     try { document.documentElement.lang = lang; } catch (e) { /* ignore */ }
   }, [lang]);
-  const value = useMemo(() => ({ lang, setLang, toggleLang, t: (k) => translate(lang, k) }), [lang, setLang, toggleLang]);
+  const value = useMemo(() => ({ lang, setLang, toggleLang, t: (k, v) => translate(lang, k, v), pn: (n) => placeLabel(lang, n) }), [lang, setLang, toggleLang]);
   return <LangContext.Provider value={value}>{children}</LangContext.Provider>;
 }
 
