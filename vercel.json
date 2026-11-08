@@ -1,5 +1,10 @@
 {
+  "functions": {
+    "api/share.js": { "includeFiles": "dist/index.html" }
+  },
   "rewrites": [
+    { "source": "/journey/:id", "destination": "/api/share?type=journey&id=:id" },
+    { "source": "/postcard/:id", "destination": "/api/share?type=postcard&id=:id" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

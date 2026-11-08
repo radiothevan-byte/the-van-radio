@@ -136,6 +136,12 @@ export const SCREENS_EL = {
   "atlas.textOnlyMany": "📍 Δες {n} ακόμα καταχωρίσεις χωρίς σημείο στον χάρτη",
   "atlas.textOnlyHeading": "Χωρίς σημείο στον χάρτη (η τοποθεσία δόθηκε ως κείμενο)",
   "atlas.hide": "Απόκρυψη",
+  // Sharing
+  "share.button": "Μοιράσου",
+  "share.copied": "Ο σύνδεσμος αντιγράφηκε",
+  "share.journeyText": "Άκου αυτή τη διαδρομή στο The Van.",
+  "share.postcardText": "Μια καρτ ποστάλ από το The Van.",
+  "share.sharedPostcard": "Κοινοποιημένη καρτ ποστάλ",
 };
 
 export const SCREENS_EN = {
@@ -266,6 +272,11 @@ export const SCREENS_EN = {
   "atlas.textOnlyMany": "📍 See {n} more entries without a map point",
   "atlas.textOnlyHeading": "No map point (location was given as text)",
   "atlas.hide": "Hide",
+  "share.button": "Share",
+  "share.copied": "Link copied",
+  "share.journeyText": "Listen to this journey on The Van.",
+  "share.postcardText": "A postcard from The Van.",
+  "share.sharedPostcard": "Shared postcard",
 };
 
 // Roadbook slides — English. Greek stays in ROADBOOK_SECTIONS (App.jsx).

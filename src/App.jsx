@@ -9,12 +9,13 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 // Atlas tried to load, regardless of whether the data fetch itself
 // succeeded. Renamed the import to MapIcon (only usage updated below) so the
 // global `Map` constructor is free again.
-import { Heart, Map as MapIcon, Info, Play, Pause, SkipBack, SkipForward, Instagram, Globe, ChevronRight, Radio, X, Mail, Smile, MapPin, Upload, Image as ImageIcon, CheckCircle2 } from "lucide-react";
+import { Heart, Map as MapIcon, Info, Play, Pause, SkipBack, SkipForward, Instagram, Globe, ChevronRight, Radio, X, Mail, Smile, MapPin, Upload, Image as ImageIcon, CheckCircle2, Share2 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LangProvider, LangToggle, useLang, DICT, placeLabel } from "./i18n.jsx";
 import { ROADBOOK_EN } from "./i18n-screens.js";
+import { shareLink, journeyShareUrl, postcardShareUrl } from "./share.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
 
 const LOGO_B64 = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBAUEBAYFBQUGBgYHCQ4JCQgICRINDQoOFRIWFhUSFBQXGiEcFxgfGRQUHScdHyIjJSUlFhwpLCgkKyEkJST/2wBDAQYGBgkICREJCREkGBQYJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCT/wAARCAFAAUADASIAAhEBAxEB/8QAHAABAAIDAQEBAAAAAAAAAAAAAAYHAQIFBAMI/8QAQRAAAQMDAwIDBQQGCgEFAAAAAQACAwQFEQYSIRMxB0FRFCJhcYEjMlKRFTRCYnOhCBYkM3KCorGywUMlU1SS0f/EABoBAQADAQEBAAAAAAAAAAAAAAABAwQCBQb/xAAwEQACAQIFAgQFBQEBAQAAAAAAAQIDEQQSITFBUWETInGBFJGxwfAFIzKh0fFC4f/aAAwDAQACEQMRAD8AvRERfHHvhERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBFkd1lCDVFutd7RwSAfmpsLmEWdzfUJvb6j80sLmEWd7fUfmgc09iClhcwiyXsHdzR9VkEEZBBCWFzVFtkLG9n4m/mEsDCLbyysb2+o/NRYGEWd7fxD803t9R+amwMIshzT2IKylgaotlguaO5A+ZUWBhFkOaexB+RWUsDVFsSB3wEy31CmwuaotuFgvaO5A+ZUWBhFnqMzjc38wspYXNUWxIHdY3t/E381NgYRbAg9kJA7pYGqLO5vqPzWeEsDVFssHuoBh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X2rnZRagsVRTU9NYXwERspGgFgD/ADeCdzicd+3CsjQhGNktGcOpJu74L08J/ESs19b69tztooLhbpmwztZnY7IPIB5BGCCFO1DPCez2W36SguFlpqynju59ulFXJ1Jd7uMF3mBg4PmDnzUzXj18ud5VZG6nfKrhERVHQREQBau7rZau7qGSYREQkIiIDLe62Wg4WdxREGyLXcU3FSLGyLXcU3FBY2UW114d2rxAgoYbpNVxto5eqwQSAB2cZDgQQcgd+4Un3FNxUxm4u8XqQ43VmcnUulLRq20PtN2pGz0zsFoBw6JwGA5h/ZIUb0V4Nad0TLPNE6ouUkjg5hrg17YcHILWgYDs497up1lMrpVZqOVPQjJG97Hy9hpTWCtNNB7WGdPr9MdTb+HdjOPgtYrdRwVE9TFSU8c9RgTSNjaHS4/EcZP1X33FNxXOZnVjyiz20UBt4t9GKJ2SaboN6Rycn3cY7r61NDS1lI6jqaaCemc3a6GSMOYR6bTxhfXcU3FMz6kWPNbbVQWelFLbqKno6cEkRQRhjc+uAvtU08VZTS01RG2WGZjo5GOGQ5pGCD8wt9xTcovrcm3BS1V/RjtUtwc6m1DXU1tc/eKTpB7mfAOJx24yRlWpYtLWjTtkjstvoomULWkOje0O6hPcvz94nzyuruKbirZ4ipNWkziNKMXdI85tdAaD9HmipjRbdnsxib0tvptxjC+7ImRMbHG1rGNAa1rRgADyAWdxTcVVc6sQfxP8KqLxIgpXvrZKCupNzYp2sDwWu5LXN4yMjI5XG1X4A2fUVts9PSV0tuntlM2kEzYw8TsBzlwyPeyXHP7ytHcmVdHE1IpKL2OXSi3do8MdjtrLTT2l9FBNRU8bImQzRh7cNGBwRjK9FTQUlYyJlTSwTthcHxiSNrgxw7EZHBHqvtlNxVWZnVkfGe30dVPFUT0tPNNCcxSyRtc+P/CSMj6JV0FJXtY2spaepEbt7BNG1+13qMjgr7bim4qMwsfKqoaSuYxlXSwVDY3B7BLGHhrh2IyOCPVcW9+H2ldRXBtxu1jo6yraAOq9py7Hbdg+99V39xTcV0puOzDinuYiijgjZFExscbAGtY0YDQOwA8gt1ruKbiubk2NkWu4puKCxsi13FNxQWNlq7um4rBOVACIiEhERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQBERAEREAREQH/2Q==";
@@ -556,6 +557,12 @@ function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFa
 }
 
 function JourneyDetail({ journey, isCurrent, isPlaying, isFav, onPlay, onFav, onClose }) {
+  const { t } = useLang();
+  const [shareNote, setShareNote] = useState("");
+  async function handleShare() {
+    const r = await shareLink({ title: journey.title, text: t("share.journeyText"), url: journeyShareUrl(journey.id) });
+    if (r === "copied") { setShareNote(t("share.copied")); setTimeout(() => setShareNote(""), 2200); }
+  }
   if (!journey) return null;
   return (
     <div className="detail-overlay fade-in">
@@ -573,6 +580,9 @@ function JourneyDetail({ journey, isCurrent, isPlaying, isFav, onPlay, onFav, on
               <div className="detail-date">{journey.date}</div>
             </div>
             <div className="detail-actions">
+              <button className="icon-btn heart-btn detail-heart" onClick={handleShare} aria-label={t("share.button")} title={t("share.button")}>
+                <Share2 size={19} strokeWidth={2} />
+              </button>
               <button
                 className={`icon-btn heart-btn detail-heart ${isFav ? "heart-active" : ""}`}
                 onClick={() => onFav(journey.id)}
@@ -589,6 +599,7 @@ function JourneyDetail({ journey, isCurrent, isPlaying, isFav, onPlay, onFav, on
               </button>
             </div>
           </div>
+          {shareNote && <div className="detail-share-note" role="status">{shareNote}</div>}
           <p className="detail-description">{journey.description}</p>
         </div>
       </div>
@@ -2302,6 +2313,7 @@ function PostcardsView() {
 // ---- VAN ATLAS 🗺️ (brief section 7) ----
 function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
   const { t } = useLang();
+  const [shareCopied, setShareCopied] = useState(false);
   const hasSong = !!(entry.songTitle || entry.artist);
   if (entry.kind === "route") {
     const songId = `route-${entry.id}`;
@@ -2327,6 +2339,12 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
     );
   }
   const saved = myVanPostcards.some((p) => p.id === entry.id);
+  // Only real submission ids make stable links (the "postcard-N" fallback ids are list positions).
+  const canShare = !!entry.id && !String(entry.id).startsWith("postcard-");
+  async function handleShare() {
+    const r = await shareLink({ title: entry.placeName ? `${entry.placeName} — The Van` : "The Van", text: t("share.postcardText"), url: postcardShareUrl(entry.id) });
+    if (r === "copied") { setShareCopied(true); setTimeout(() => setShareCopied(false), 2200); }
+  }
   return (
     <div className="atlas-entry-card">
       <div className="atlas-entry-kind">💌 Postcard</div>
@@ -2336,6 +2354,9 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
       {entry.displayName && <div className="atlas-entry-byline">— {entry.displayName}</div>}
       <div className="atlas-entry-actions">
         {entry.musicUrl && <a className="atlas-entry-link" href={entry.musicUrl} target="_blank" rel="noreferrer">{t("atlas.listen")}</a>}
+        {canShare && (
+          <button className="atlas-entry-save" onClick={handleShare}>{shareCopied ? t("share.copied") : t("share.button")}</button>
+        )}
         <button
           className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
           onClick={() => onSavePostcard({ id: entry.id, placeName: entry.placeName, story: entry.story, photoUrl: entry.photoUrl })}
@@ -2436,7 +2457,7 @@ function AtlasClusterLayer({ groups, activeGroups, onSelect }) {
   ));
 }
 
-function VanAtlasView({ myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
+function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
   const { t } = useLang();
   const [status, setStatus] = useState("loading"); // loading | ready | error
   const [groups, setGroups] = useState([]);
@@ -2449,6 +2470,7 @@ function VanAtlasView({ myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }
   // listed these. Now it stays empty until the person explicitly asks to
   // see them, same as the pin detail panel only shows after a click.
   const [showTextOnly, setShowTextOnly] = useState(false);
+  const [sharedEntry, setSharedEntry] = useState(null); // postcard opened from a shared link
 
   useEffect(() => {
     let cancelled = false;
@@ -2456,6 +2478,8 @@ function VanAtlasView({ myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }
     fetchAtlasEntries()
       .then((entries) => {
         if (cancelled) return;
+        // fetchAtlasEntries only ever contains approved postcards, so an unknown id just shows nothing.
+        if (sharedPostcardId) setSharedEntry(entries.find((e) => e.kind === "postcard" && String(e.id) === String(sharedPostcardId)) || null);
         const { groups: g, textOnly: t } = buildAtlasGroups(entries);
         setGroups(g);
         setTextOnly(t);
@@ -2480,6 +2504,14 @@ function VanAtlasView({ myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }
         {t("atlas.intro")}
       </p>
       <PromotionSlot placement="ATLAS_FEATURED" variant="strip" />
+
+      {sharedEntry && (
+        <div className="atlas-shared">
+          <div className="route-step-heading route-step-heading-sm">{t("share.sharedPostcard")}</div>
+          {sharedEntry.placeName && <div className="atlas-entry-place-text">📍 {sharedEntry.placeName}</div>}
+          <AtlasEntryCard entry={sharedEntry} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={onSaveSong} onSavePostcard={onSavePostcard} />
+        </div>
+      )}
 
       {status === "loading" && <div className="route-map-badge-standalone">{t("atlas.loading")}</div>}
       {status === "error" && <div className="route-blocked-msg">{t("atlas.error")}</div>}
@@ -2723,11 +2755,41 @@ function normalizePath(pathname) {
   return ((pathname || "/").replace(/\/+$/, "") || "/").toLowerCase();
 }
 function tabFromPath(pathname) {
+  if (/^\/journey\/\d{1,5}\/?$/i.test(pathname || "")) return "journeys";
+  if (/^\/postcard\/[^/]+\/?$/i.test(pathname || "")) return "atlas";
   return PATH_TABS[normalizePath(pathname)] || "home";
+}
+// Shared links: /journey/<n> and /postcard/<id> (the server renders OG meta for them), plus the
+// ?j= / ?p= fallback form. Returns { type, id } or null.
+function parseDeepLink(loc) {
+  try {
+    const path = loc.pathname || "";
+    let m = /^\/journey\/(\d{1,5})\/?$/i.exec(path);
+    if (m) return { type: "journey", id: parseInt(m[1], 10) };
+    m = /^\/postcard\/([^/]+)\/?$/i.exec(path);
+    if (m) return { type: "postcard", id: decodeURIComponent(m[1]) };
+    const q = new URLSearchParams(loc.search || "");
+    if (/^\d{1,5}$/.test(q.get("j") || "")) return { type: "journey", id: parseInt(q.get("j"), 10) };
+    if (/^[\w.:-]{1,100}$/.test(q.get("p") || "")) return { type: "postcard", id: q.get("p") };
+  } catch (e) { /* ignore */ }
+  return null;
 }
 
 function TheVanAppInner() {
-  const [tab, setTabState] = useState(() => (typeof window !== "undefined" ? tabFromPath(window.location.pathname) : "home"));
+  const deepLinkRef = useRef(typeof window !== "undefined" ? parseDeepLink(window.location) : null);
+  const [tab, setTabState] = useState(() => {
+    if (typeof window === "undefined") return "home";
+    const d = deepLinkRef.current;
+    if (d) return d.type === "journey" ? "journeys" : "atlas";
+    return tabFromPath(window.location.pathname);
+  });
+  // A shared link lands on its section; tidy the address bar to that section's normal path
+  // (replaceState: no extra history entry, no extra page view).
+  useEffect(() => {
+    const d = deepLinkRef.current;
+    if (!d) return;
+    try { window.history.replaceState({ tab: d.type === "journey" ? "journeys" : "atlas" }, "", d.type === "journey" ? TAB_PATHS.journeys : TAB_PATHS.atlas); } catch (e) { /* ignore */ }
+  }, []);
   function setTab(next) {
     if (!TAB_PATHS[next]) return;
     setTabState(next);
@@ -2786,7 +2848,7 @@ function TheVanAppInner() {
     });
   }
   const [currentId, setCurrentId] = useState(null);
-  const [openId, setOpenId] = useState(null);
+  const [openId, setOpenId] = useState(() => (deepLinkRef.current && deepLinkRef.current.type === "journey" ? deepLinkRef.current.id : null));
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -2811,6 +2873,11 @@ function TheVanAppInner() {
       });
     return () => { cancelled = true; };
   }, []);
+
+  // A shared/promoted journey that doesn't exist (any more): close instead of showing nothing.
+  useEffect(() => {
+    if (!journeysLoading && openId != null && !journeys.some((j) => j.id === openId)) setOpenId(null);
+  }, [journeysLoading, journeys, openId]);
 
   const currentIndex = journeys.findIndex((j) => j.id === currentId);
   const currentJourney = currentIndex >= 0 ? journeys[currentIndex] : null;
@@ -2966,7 +3033,7 @@ function TheVanAppInner() {
         {tab === "route" && <PickRouteView />}
         {tab === "postcards" && <PostcardsView />}
         {tab === "atlas" && (
-          <VanAtlasView myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={handleSaveSong} onSavePostcard={handleSavePostcard} />
+          <VanAtlasView sharedPostcardId={deepLinkRef.current && deepLinkRef.current.type === "postcard" ? deepLinkRef.current.id : null} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={handleSaveSong} onSavePostcard={handleSavePostcard} />
         )}
         {tab === "roadbook" && <RoadbookView onNavigate={setTab} />}
         {tab === "about" && <AboutView />}
@@ -3408,6 +3475,8 @@ const CSS = `
   display: flex;
   flex-direction: column;
 }
+.detail-share-note { text-align: right; font-size: 12px; font-weight: 600; color: var(--accent); margin: 2px 2px 6px; }
+.atlas-shared { margin: 4px 0 18px; }
 .detail-top {
   display: flex; align-items: flex-end; justify-content: space-between;
   gap: 14px; margin-bottom: 16px;
