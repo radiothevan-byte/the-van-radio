@@ -12,6 +12,7 @@
 // Anything else is ignored.
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useLang } from "./i18n.jsx";
+import { trackEvent, trackOnce } from "./analytics.js";
 
 export const PLACEMENTS = ["HOME_HERO", "HOME_FEATURED", "JOURNEYS_FEATURED", "ATLAS_FEATURED", "COMMUNITY_FEATURED"];
 
@@ -155,7 +156,7 @@ function usePromotionsForSlot(placement) {
 
 // ---------- UI ----------
 
-function PromoCard({ item, variant }) {
+function PromoCard({ item, variant, placement }) {
   const { lang, t } = useLang();
   const { actions } = useContext(PromotionsContext);
   const { promo, target, journey } = item;
@@ -177,15 +178,30 @@ function PromoCard({ item, variant }) {
     </>
   );
   const cls = `promo-card promo-${variant}${img ? " promo-has-img" : ""}`;
+  // Impression: counted once per session per promotion+placement, when at least half of the card is on screen.
+  const cardRef = useRef(null);
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el) return undefined;
+    const fire = () => trackOnce(`promo-imp:${promo.id}:${placement}`, "promo_impression", { id: promo.id, placement });
+    if (typeof IntersectionObserver === "undefined") { fire(); return undefined; }
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting && e.intersectionRatio >= 0.5)) { fire(); io.disconnect(); }
+    }, { threshold: [0.5] });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [promo.id, placement]);
+  const click = () => trackEvent("promo_click", { id: promo.id, placement, target: target.kind });
   if (target.kind === "external") {
-    return <a className={cls} style={style} href={target.href} target="_blank" rel="noopener noreferrer">{body}</a>;
+    return <a ref={cardRef} className={cls} style={style} href={target.href} target="_blank" rel="noopener noreferrer" onClick={click}>{body}</a>;
   }
   const onClick = () => {
+    click();
     if (!actions) return;
     if (target.kind === "tab") actions.navigate(target.tab);
     else if (target.kind === "journey") actions.openJourney(target.id);
   };
-  return <button type="button" className={cls} style={style} onClick={onClick}>{body}</button>;
+  return <button ref={cardRef} type="button" className={cls} style={style} onClick={onClick}>{body}</button>;
 }
 
 // variant: "hero" (single large card), "list" (section with cards), "strip" (single slim card)
@@ -198,7 +214,7 @@ export function PromotionSlot({ placement, variant = "list", titleKey, max }) {
     <section className={`promo-slot promo-slot-${variant}`} aria-label={titleKey ? t(titleKey) : undefined}>
       {titleKey && variant === "list" && <h2 className="promo-section-title">{t(titleKey)}</h2>}
       <div className={variant === "list" ? "promo-list" : undefined}>
-        {shown.map((it) => <PromoCard key={it.promo.id} item={it} variant={variant} />)}
+        {shown.map((it) => <PromoCard key={it.promo.id} item={it} variant={variant} placement={placement} />)}
       </div>
     </section>
   );
