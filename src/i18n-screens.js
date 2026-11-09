@@ -148,6 +148,18 @@ export const SCREENS_EL = {
   "content.poll.kicker": "Το ερώτημα του Van",
   "content.poll.thanks": "Ευχαριστούμε για την ψήφο σου",
   "content.poll.votes": "{n} ψήφοι",
+  // Push notifications (P7)
+  "push.kicker": "Ειδοποιήσεις",
+  "push.title": "Μην χάσεις τίποτα",
+  "push.text": "Ενημερώσου για τις εκπομπές του Σαββάτου και για κάθε νέα πρόταση του The Van. Διαλέγεις εσύ τι θα λαμβάνεις και μπορείς να σταματήσεις όποτε θες.",
+  "push.enable": "Ενεργοποίηση ειδοποιήσεων",
+  "push.on": "Οι ειδοποιήσεις είναι ενεργές",
+  "push.topic.shows": "Εκπομπές Σαββάτου",
+  "push.topic.news": "Νέες προτάσεις του The Van",
+  "push.disable": "Απενεργοποίηση ειδοποιήσεων",
+  "push.denied": "Οι ειδοποιήσεις είναι μπλοκαρισμένες στον browser σου. Μπορείς να τις επιτρέψεις από τις ρυθμίσεις του site.",
+  "push.ios": "Για ειδοποιήσεις στο iPhone, πρόσθεσε πρώτα το app στην αρχική οθόνη: πάτα το κουμπί Κοινοποίηση και μετά «Προσθήκη στην οθόνη Αφετηρίας». Άνοιξέ το από εκεί και θα βρεις εδώ το κουμπί.",
+  "push.error": "Δεν ολοκληρώθηκε. Δοκίμασε ξανά σε λίγο.",
 };
 
 export const SCREENS_EN = {
@@ -288,6 +300,18 @@ export const SCREENS_EN = {
   "content.poll.kicker": "The Van Poll",
   "content.poll.thanks": "Thanks for voting",
   "content.poll.votes": "{n} votes",
+  // Push notifications (P7)
+  "push.kicker": "Notifications",
+  "push.title": "Don't miss a thing",
+  "push.text": "Get notified about the Saturday shows and every new suggestion from The Van. You choose what to receive and can stop at any time.",
+  "push.enable": "Turn on notifications",
+  "push.on": "Notifications are on",
+  "push.topic.shows": "Saturday shows",
+  "push.topic.news": "New suggestions from The Van",
+  "push.disable": "Turn off notifications",
+  "push.denied": "Notifications are blocked in your browser. You can allow them in the site settings.",
+  "push.ios": "For notifications on iPhone, first add the app to your Home Screen: tap Share, then \"Add to Home Screen\". Open it from there and the button will appear here.",
+  "push.error": "That didn't work. Please try again in a moment.",
 };
 
 // Roadbook slides — English. Greek stays in ROADBOOK_SECTIONS (App.jsx).

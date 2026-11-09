@@ -293,6 +293,18 @@ function doPost(e) {
   if (formType === "content_draft") {
     return handleContentDraft(data);
   }
+  if (formType === "push_subscribe") {
+    return handlePushSubscribe(data);
+  }
+  if (formType === "push_unsubscribe") {
+    return handlePushUnsubscribe(data);
+  }
+  if (formType === "push_due") {
+    return handlePushDue(data);
+  }
+  if (formType === "push_report") {
+    return handlePushReport(data);
+  }
   return jsonOutput({ ok: false, error: "invalid-request" });
 }
 
@@ -1320,4 +1332,234 @@ function handleContentDraft(data) {
     return jsonOutput({ ok: true, id: id });
   }
   return jsonOutput({ ok: false, error: "invalid-request" });
+}
+
+
+// =====================================================================
+// PUSH NOTIFICATIONS (P7) — browser notifications for "shows" (Saturday broadcasts) and "news"
+// =====================================================================
+// How it works:
+//   * The app (Home -> Notifications) registers a browser subscription here: form_type "push_subscribe".
+//     Stored in the sheet "Push Subscriptions" (technical keys only — no name, no email, no IP).
+//   * YOU decide what is sent, in the sheet "Push Outbox". A row is sent only when Status = "Approved" and
+//     its Send At time has passed:  Draft -> Approved (you) -> Sending -> Sent (automatic).
+//       - Topic "shows": one row per Saturday broadcast, written by hand (Send At = e.g. 30 min before).
+//       - Topic "news":  created automatically (Status Approved) when a Song of the Day is published today
+//                        or a Van Poll starts today. Set PUSH_AUTO_NEWS = false to turn that off.
+//   * The actual sending (encryption + delivery) is done by the GitHub Action "Send push notifications"
+//     (scripts/send-push.mjs, every ~15 min). It asks this script for what is due with form_type "push_due",
+//     authenticated with the Script Property PUSH_SENDER_SECRET, and reports back with "push_report".
+//
+// ONE-TIME SETUP (Apps Script editor, run once, authorise when asked):
+//   1. setupPushSheets()  -> creates "Push Subscriptions" and "Push Outbox" (+ Draft example rows)
+//   2. Project Settings -> Script properties:  PUSH_SENDER_SECRET = <the same long random string as the GitHub secret>
+//   3. Deploy -> Manage deployments -> Edit -> Version: New version  (same /exec URL)
+// Never share the sheet "Push Subscriptions": it contains the browsers' delivery addresses.
+
+var PUSH_SUBS_SHEET = "Push Subscriptions";
+var PUSH_OUTBOX_SHEET = "Push Outbox";
+var PUSH_SUB_HEADERS = ["ID", "Endpoint", "P256dh", "Auth", "Topics", "Lang", "Created At", "Last Seen"];
+var PUSH_OUT_HEADERS = ["ID", "Topic", "Title EL", "Title EN", "Body EL", "Body EN", "URL", "Send At", "Status", "Source", "Ref", "Created At", "Sent At", "Recipients"];
+var PUSH_TOPICS = ["shows", "news"];
+var PUSH_STATUSES = ["Draft", "Approved", "Sending", "Sent", "Cancelled"];
+var PUSH_MAX_SUBS = 5000;
+var PUSH_AUTO_NEWS = true;
+var PUSH_HOSTS = [
+  /^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^[a-z0-9-]+\.push\.apple\.com$/,
+  /^web\.push\.apple\.com$/, /^[a-z0-9.-]+\.notify\.windows\.com$/
+];
+
+function setupPushSheets() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var subs = ss.getSheetByName(PUSH_SUBS_SHEET) || ss.insertSheet(PUSH_SUBS_SHEET);
+  if (subs.getLastRow() === 0) { subs.appendRow(PUSH_SUB_HEADERS); subs.setFrozenRows(1); subs.getRange(1, 1, 1, PUSH_SUB_HEADERS.length).setFontWeight("bold"); }
+  var out = ss.getSheetByName(PUSH_OUTBOX_SHEET) || ss.insertSheet(PUSH_OUTBOX_SHEET);
+  if (out.getLastRow() === 0) {
+    out.appendRow(PUSH_OUT_HEADERS); out.setFrozenRows(1); out.getRange(1, 1, 1, PUSH_OUT_HEADERS.length).setFontWeight("bold");
+    out.appendRow(["example-show", "shows", "Εκπομπή Σαββάτου στις 18:00", "Saturday show at 18:00", "Σε λίγο στον αέρα — άνοιξε το The Van.", "On air soon — open The Van.", "/", "", "Draft", "Manual", "", new Date(), "", ""]);
+    out.appendRow(["example-news", "news", "Νέο στο The Van", "New on The Van", "Δες τι νέο υπάρχει σήμερα.", "See what's new today.", "/", "", "Draft", "Manual", "", new Date(), "", ""]);
+  }
+  var rows = Math.max(out.getMaxRows() - 1, 1);
+  out.getRange(2, 2, rows, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(PUSH_TOPICS, true).setAllowInvalid(false).build());
+  out.getRange(2, 9, rows, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(PUSH_STATUSES, true).setAllowInvalid(false).build());
+  Logger.log("setupPushSheets: ready. Now set the Script Property PUSH_SENDER_SECRET and redeploy.");
+}
+
+function pushEndpointOk_(endpoint) {
+  var m = /^https:\/\/([^\/:@?#]+)(\/[^\s]*)?$/.exec(String(endpoint || ""));
+  if (!m || String(endpoint).length > 1000) return false;
+  return PUSH_HOSTS.some(function (re) { return re.test(m[1]); });
+}
+function pushId_(endpoint) {
+  var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(endpoint));
+  return bytes.slice(0, 6).map(function (b) { return ("0" + (b & 255).toString(16)).slice(-2); }).join("");
+}
+function pushTopics_(list) {
+  var out = [];
+  (Array.isArray(list) ? list : []).forEach(function (t) { if (PUSH_TOPICS.indexOf(t) !== -1 && out.indexOf(t) === -1) out.push(t); });
+  return out;
+}
+function pushFindRow_(sheet, col, value) {
+  if (!sheet || sheet.getLastRow() < 2) return 0;
+  var f = sheet.getRange(2, col, sheet.getLastRow() - 1, 1).createTextFinder(String(value)).matchEntireCell(true).matchCase(true).findNext();
+  return f ? f.getRow() : 0;
+}
+function pushSenderOk_(key) {
+  var secret = PropertiesService.getScriptProperties().getProperty("PUSH_SENDER_SECRET");
+  return !!secret && secret.length >= 16 && String(key || "") === secret;
+}
+function pushDate_(v) {
+  if (v === "" || v === null || v === undefined) return null;
+  var d = (v instanceof Date) ? v : new Date(String(v));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function handlePushSubscribe(data) {
+  if (!checkRateLimit("push_sub", 120, 60)) return jsonOutput({ ok: false, error: "rate-limited" });
+  var sub = data.subscription || {}, keys = sub.keys || {};
+  var endpoint = String(sub.endpoint || ""), p256dh = String(keys.p256dh || ""), auth = String(keys.auth || "");
+  var topics = pushTopics_(data.topics);
+  var lang = data.lang === "en" ? "en" : "el";
+  if (!pushEndpointOk_(endpoint) || !/^[A-Za-z0-9_-]{86,88}$/.test(p256dh) || !/^[A-Za-z0-9_-]{22}$/.test(auth) || !topics.length) {
+    return jsonOutput({ ok: false, error: "invalid-request" });
+  }
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonOutput({ ok: false, error: "busy" });
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sh = ss.getSheetByName(PUSH_SUBS_SHEET);
+    if (!sh) return jsonOutput({ ok: false, error: "not-set-up" });
+    var row = pushFindRow_(sh, 2, endpoint);
+    var now = new Date();
+    if (row) {
+      sh.getRange(row, 3, 1, 4).setValues([[p256dh, auth, topics.join(","), lang]]);
+      sh.getRange(row, 8).setValue(now);
+    } else {
+      if (sh.getLastRow() - 1 >= PUSH_MAX_SUBS) return jsonOutput({ ok: false, error: "full" });
+      sh.appendRow([pushId_(endpoint), endpoint, p256dh, auth, topics.join(","), lang, now, now]);
+    }
+    return jsonOutput({ ok: true });
+  } finally { lock.releaseLock(); }
+}
+
+function handlePushUnsubscribe(data) {
+  if (!checkRateLimit("push_sub", 120, 60)) return jsonOutput({ ok: false, error: "rate-limited" });
+  var endpoint = String(data.endpoint || "");
+  if (!pushEndpointOk_(endpoint)) return jsonOutput({ ok: false, error: "invalid-request" });
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return jsonOutput({ ok: false, error: "busy" });
+  try {
+    var sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(PUSH_SUBS_SHEET);
+    var row = pushFindRow_(sh, 2, endpoint);
+    if (row) sh.deleteRow(row);                       // data minimisation: remove, don't keep
+    return jsonOutput({ ok: true });
+  } finally { lock.releaseLock(); }
+}
+
+// Creates "news" notifications for content that goes live TODAY (song of the day / poll start). Idempotent via Ref.
+function pushCollectNews_(ss) {
+  if (!PUSH_AUTO_NEWS) return;
+  var out = ss.getSheetByName(PUSH_OUTBOX_SHEET);
+  if (!out) return;
+  var have = {};
+  if (out.getLastRow() > 1) out.getRange(2, 11, out.getLastRow() - 1, 1).getValues().forEach(function (r) { if (r[0]) have[String(r[0])] = true; });
+  var today = contentToday_(), now = new Date();
+  var sendAt = new Date(today.getTime()); sendAt.setHours(10, 0, 0, 0);
+  if (now > sendAt) sendAt = now;
+  function add(ref, titleEl, titleEn, bodyEl, bodyEn) {
+    if (have[ref]) return;
+    out.appendRow(["auto-" + Utilities.formatDate(now, "UTC", "yyyyMMddHHmmss") + "-" + Math.floor(Math.random() * 1000), "news", titleEl, titleEn, bodyEl, bodyEn, "/", sendAt, "Approved", "Auto", ref, now, "", ""]);
+    have[ref] = true;
+  }
+  var song = ss.getSheetByName(SONG_SHEET_NAME);
+  if (song && song.getLastRow() > 1) {
+    var idx = contentHeaderIndex_(song);
+    song.getRange(2, 1, song.getLastRow() - 1, song.getLastColumn()).getValues().forEach(function (r) {
+      if (String(r[idx["Status"]]).trim() !== "Published") return;
+      var d = contentDay_(r[idx["Publish Date"]]);
+      if (!d || d.getTime() !== today.getTime()) return;
+      var t = contentClean_(r[idx["Title"]], 80), a = contentClean_(r[idx["Artist"]], 60);
+      if (!t) return;
+      var body = a ? t + " — " + a : t;
+      add("song:" + contentClean_(r[idx["ID"]], 80), "Τραγούδι της Ημέρας", "Song of the Day", body, body);
+    });
+  }
+  var poll = ss.getSheetByName(POLL_SHEET_NAME);
+  if (poll && poll.getLastRow() > 1) {
+    var pidx = contentHeaderIndex_(poll);
+    poll.getRange(2, 1, poll.getLastRow() - 1, poll.getLastColumn()).getValues().forEach(function (r) {
+      if (String(r[pidx["Status"]]).trim() !== "Published") return;
+      var s = contentDay_(r[pidx["Start Date"]]);
+      if (!s || s.getTime() !== today.getTime()) return;
+      var qEl = contentClean_(r[pidx["Question EL"]], 140), qEn = contentClean_(r[pidx["Question EN"]], 140);
+      if (!qEl && !qEn) return;
+      add("poll:" + contentClean_(r[pidx["ID"]], 80), "Νέο ερώτημα στο The Van", "New question on The Van", qEl || qEn, qEn || qEl);
+    });
+  }
+}
+
+// Called by the GitHub Action. Returns what is due + the active subscriptions, and CLAIMS the rows (Approved -> Sending)
+// so a retry can never send the same notification twice. dry_run claims nothing.
+function handlePushDue(data) {
+  if (!pushSenderOk_(data.key)) return jsonOutput({ ok: false, error: "forbidden" });   // secret is 192-bit random: no rate limit needed (and none that could lock the sender out)
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) return jsonOutput({ ok: false, error: "busy" });
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var out = ss.getSheetByName(PUSH_OUTBOX_SHEET), subs = ss.getSheetByName(PUSH_SUBS_SHEET);
+    if (!out || !subs) return jsonOutput({ ok: false, error: "not-set-up" });
+    var dry = data.dry_run === true;
+    if (!dry) pushCollectNews_(ss);
+    var now = new Date(), notes = [];
+    if (out.getLastRow() > 1) {
+      var vals = out.getRange(2, 1, out.getLastRow() - 1, PUSH_OUT_HEADERS.length).getValues();
+      for (var i = 0; i < vals.length; i++) {
+        var r = vals[i];
+        if (String(r[8]).trim() !== "Approved") continue;
+        if (PUSH_TOPICS.indexOf(String(r[1]).trim()) === -1) continue;
+        var at = pushDate_(r[7]);
+        if (at && at > now) continue;
+        var url = String(r[6] || "/").trim();
+        if (url.charAt(0) !== "/" || url.charAt(1) === "/") url = "/";
+        notes.push({
+          id: contentClean_(r[0], 80), topic: String(r[1]).trim(),
+          titleEl: contentClean_(r[2], 80), titleEn: contentClean_(r[3], 80),
+          bodyEl: contentClean_(r[4], 160), bodyEn: contentClean_(r[5], 160), url: url.slice(0, 200)
+        });
+        if (!dry) out.getRange(i + 2, 9).setValue("Sending");
+      }
+    }
+    var subsOut = [];
+    if (notes.length && subs.getLastRow() > 1) {
+      subs.getRange(2, 1, subs.getLastRow() - 1, PUSH_SUB_HEADERS.length).getValues().forEach(function (s) {
+        if (!pushEndpointOk_(s[1])) return;
+        subsOut.push({ endpoint: String(s[1]), p256dh: String(s[2]), auth: String(s[3]), topics: String(s[4]).split(","), lang: s[5] === "en" ? "en" : "el" });
+      });
+    }
+    return jsonOutput({ ok: true, notifications: notes, subscriptions: subsOut });
+  } finally { lock.releaseLock(); }
+}
+
+function handlePushReport(data) {
+  if (!pushSenderOk_(data.key)) return jsonOutput({ ok: false, error: "forbidden" });   // secret is 192-bit random: no rate limit needed (and none that could lock the sender out)
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(25000)) return jsonOutput({ ok: false, error: "busy" });
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var out = ss.getSheetByName(PUSH_OUTBOX_SHEET), subs = ss.getSheetByName(PUSH_SUBS_SHEET);
+    var now = new Date();
+    (Array.isArray(data.sent) ? data.sent : []).slice(0, 200).forEach(function (s) {
+      var row = pushFindRow_(out, 1, String((s && s.id) || ""));
+      if (!row || String(out.getRange(row, 9).getValue()).trim() !== "Sending") return;
+      out.getRange(row, 9).setValue("Sent");
+      out.getRange(row, 13).setValue(now);
+      out.getRange(row, 14).setValue(Math.max(0, parseInt(s.recipients, 10) || 0));
+    });
+    (Array.isArray(data.expired) ? data.expired : []).slice(0, 1000).forEach(function (ep) {
+      if (!pushEndpointOk_(ep)) return;
+      var row = pushFindRow_(subs, 2, ep);
+      if (row) subs.deleteRow(row);
+    });
+    return jsonOutput({ ok: true });
+  } finally { lock.releaseLock(); }
 }

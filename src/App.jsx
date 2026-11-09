@@ -17,6 +17,7 @@ import { LangProvider, LangToggle, useLang, DICT, placeLabel } from "./i18n.jsx"
 import { ROADBOOK_EN } from "./i18n-screens.js";
 import { shareLink, journeyShareUrl, postcardShareUrl } from "./share.js";
 import { ContentProvider, SongOfTheDayCard, VanPollCard, CONTENT_CSS } from "./content.jsx";
+import { NotificationsCard, PUSH_CSS } from "./push.jsx";
 import { trackEvent, trackReturningVisit } from "./analytics.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
 
@@ -2653,6 +2654,7 @@ function HomeHubView({ onNavigate }) {
       <PromotionSlot placement="HOME_FEATURED" variant="list" titleKey="promo.featured" />
       <SongOfTheDayCard />
       <VanPollCard />
+      <NotificationsCard webhookUrl={ROUTE_SHEET_WEBHOOK_URL} />
 
       <button className="hub-card hub-card-atlas" style={art(HUB_ART_ATLAS, 0.0, "auto 104%", "108% 50%")} onClick={() => onNavigate("atlas")}>
         <div className="hub-atlas-fade" />
@@ -3028,7 +3030,7 @@ function TheVanAppInner() {
     <PromotionsProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} actions={promoActions}>
     <ContentProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} onEvent={trackEvent}>
     <div className="app-root">
-      <style>{CSS}{PROMO_CSS}{CONTENT_CSS}</style>
+      <style>{CSS}{PROMO_CSS}{CONTENT_CSS}{PUSH_CSS}</style>
       <audio
         ref={audioRef}
         src={liveOn ? LIVE_STREAM_URL : (currentJourney ? currentJourney.audioUrl : undefined)}
