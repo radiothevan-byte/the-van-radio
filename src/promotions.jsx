@@ -8,6 +8,7 @@
 // Targets (Target URL column):
 //   "/atlas", "/route", ...  -> in-app section          (the 8 real app URLs)
 //   "/journey/19"            -> opens Journey #19        (card image falls back to the Journey's image)
+//   "/postcard/<id>"         -> opens that approved postcard in Van Atlas (same id as in the shared link)
 //   "https://..."            -> external link (https only, new tab)
 // Anything else is ignored.
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -87,6 +88,8 @@ export function resolveTarget(targetUrl, resolveTab) {
   }
   const j = u.match(/^\/?journey[\/:](\d+)\/?$/i);
   if (j) return { kind: "journey", id: parseInt(j[1], 10) };
+  const pc = u.match(/^\/?postcard[\/:]([\w.:-]{1,100})\/?$/i);
+  if (pc) return { kind: "postcard", id: pc[1] };
   if (u.charAt(0) === "/") {
     const tab = resolveTab ? resolveTab(u) : null;
     return tab ? { kind: "tab", tab } : null;
@@ -120,7 +123,7 @@ export async function fetchPromotions(webhookUrl) {
 
 const PromotionsContext = createContext({ list: [], actions: null });
 
-// `actions`: { navigate(tab), openJourney(id), resolveTab(path) -> tab|null, getJourney(id) -> journey|undefined }
+// `actions`: { navigate(tab), openJourney(id), openPostcard(id), resolveTab(path) -> tab|null, getJourney(id) -> journey|undefined }
 export function PromotionsProvider({ webhookUrl, actions, children }) {
   const [list, setList] = useState([]);
   useEffect(() => {
@@ -143,6 +146,7 @@ function usePromotionsForSlot(placement) {
       .map((p) => {
         const target = resolveTarget(p.targetUrl, actions.resolveTab);
         if (!target) return null;
+        if (target.kind === "postcard" && !actions.openPostcard) return null;
         let journey = null;
         if (target.kind === "journey") {
           journey = actions.getJourney ? actions.getJourney(target.id) : null;
@@ -200,6 +204,7 @@ function PromoCard({ item, variant, placement }) {
     if (!actions) return;
     if (target.kind === "tab") actions.navigate(target.tab);
     else if (target.kind === "journey") actions.openJourney(target.id);
+    else if (target.kind === "postcard" && actions.openPostcard) actions.openPostcard(target.id);
   };
   return <button ref={cardRef} type="button" className={cls} style={style} onClick={onClick}>{body}</button>;
 }

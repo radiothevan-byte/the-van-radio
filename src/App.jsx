@@ -2463,7 +2463,7 @@ function AtlasClusterLayer({ groups, activeGroups, onSelect }) {
   ));
 }
 
-function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
+function VanAtlasView({ sharedPostcardId, sharedNonce, myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
   const { t } = useLang();
   const [status, setStatus] = useState("loading"); // loading | ready | error
   const [groups, setGroups] = useState([]);
@@ -2476,7 +2476,9 @@ function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong
   // listed these. Now it stays empty until the person explicitly asks to
   // see them, same as the pin detail panel only shows after a click.
   const [showTextOnly, setShowTextOnly] = useState(false);
-  const [sharedEntry, setSharedEntry] = useState(null); // postcard opened from a shared link
+  const [sharedEntry, setSharedEntry] = useState(null); // postcard opened from a shared link or a promotion
+  const [allEntries, setAllEntries] = useState(null);
+  const sharedRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -2484,8 +2486,7 @@ function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong
     fetchAtlasEntries()
       .then((entries) => {
         if (cancelled) return;
-        // fetchAtlasEntries only ever contains approved postcards, so an unknown id just shows nothing.
-        if (sharedPostcardId) setSharedEntry(entries.find((e) => e.kind === "postcard" && String(e.id) === String(sharedPostcardId)) || null);
+        setAllEntries(entries);
         const { groups: g, textOnly: t } = buildAtlasGroups(entries);
         setGroups(g);
         setTextOnly(t);
@@ -2500,6 +2501,17 @@ function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong
     return () => { cancelled = true; };
   }, []);
 
+  // A shared link or a promotion can ask for a postcard at any time (also while Atlas is already open).
+  // fetchAtlasEntries only ever contains approved postcards, so an unknown id just shows nothing.
+  useEffect(() => {
+    if (!allEntries || !sharedPostcardId) return;
+    setSharedEntry(allEntries.find((e) => e.kind === "postcard" && String(e.id) === String(sharedPostcardId)) || null);
+  }, [allEntries, sharedPostcardId, sharedNonce]);
+  useEffect(() => {
+    if (!sharedEntry || !sharedNonce) return;   // only for a tap on a promotion, not for a freshly opened shared link
+    try { if (sharedRef.current) sharedRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { /* ignore */ }
+  }, [sharedEntry, sharedNonce]);
+
   const isEmpty = status === "ready" && groups.length === 0 && textOnly.length === 0;
 
   return (
@@ -2512,7 +2524,7 @@ function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong
       <PromotionSlot placement="ATLAS_FEATURED" variant="strip" />
 
       {sharedEntry && (
-        <div className="atlas-shared">
+        <div className="atlas-shared" ref={sharedRef}>
           <div className="route-step-heading route-step-heading-sm">{t("share.sharedPostcard")}</div>
           {sharedEntry.placeName && <div className="atlas-entry-place-text">📍 {sharedEntry.placeName}</div>}
           <AtlasEntryCard entry={sharedEntry} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={onSaveSong} onSavePostcard={onSavePostcard} />
@@ -2856,6 +2868,8 @@ function TheVanAppInner() {
     });
   }
   const [currentId, setCurrentId] = useState(null);
+  // Postcard requested by a shared link (initial) or by tapping a promotion (nonce changes on every tap).
+  const [sharedPostcard, setSharedPostcard] = useState(() => (deepLinkRef.current && deepLinkRef.current.type === "postcard" ? { id: deepLinkRef.current.id, n: 0 } : { id: null, n: 0 }));
   const [openId, setOpenId] = useState(() => (deepLinkRef.current && deepLinkRef.current.type === "journey" ? deepLinkRef.current.id : null));
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -3020,6 +3034,7 @@ function TheVanAppInner() {
   const promoActions = useMemo(() => ({
     navigate: (key) => setTabRef.current(key),
     openJourney: (id) => setOpenId(id),
+    openPostcard: (id) => { setSharedPostcard((p) => ({ id, n: p.n + 1 })); setTabRef.current("atlas"); },
     resolveTab: (path) => PATH_TABS[normalizePath(path)] || null,
     getJourney: (id) => journeysRef.current.find((j) => j.id === id),
   }), []);
@@ -3061,7 +3076,7 @@ function TheVanAppInner() {
         {tab === "route" && <PickRouteView />}
         {tab === "postcards" && <PostcardsView />}
         {tab === "atlas" && (
-          <VanAtlasView sharedPostcardId={deepLinkRef.current && deepLinkRef.current.type === "postcard" ? deepLinkRef.current.id : null} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={handleSaveSong} onSavePostcard={handleSavePostcard} />
+          <VanAtlasView sharedPostcardId={sharedPostcard.id} sharedNonce={sharedPostcard.n} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={handleSaveSong} onSavePostcard={handleSavePostcard} />
         )}
         {tab === "roadbook" && <RoadbookView onNavigate={setTab} />}
         {tab === "about" && <AboutView />}
