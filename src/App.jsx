@@ -17,7 +17,7 @@ import { LangProvider, LangToggle, useLang, DICT, placeLabel } from "./i18n.jsx"
 import { ROADBOOK_EN } from "./i18n-screens.js";
 import { shareLink, journeyShareUrl, postcardShareUrl } from "./share.js";
 import { ContentProvider, SongOfTheDayCard, VanPollCard, CONTENT_CSS } from "./content.jsx";
-import { NotificationsCard, PUSH_CSS } from "./push.jsx";
+import { NotificationsBell, PUSH_CSS } from "./push.jsx";
 import { trackEvent, trackReturningVisit } from "./analytics.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
 
@@ -870,6 +870,7 @@ function TopActionBar({ liveOn, onToggleLive, onOpenCopilot }) {
       <button className={`top-action-btn live-btn ${liveOn ? "live-btn-active" : ""}`} onClick={onToggleLive}>
         <span className="live-dot" /> Live
       </button>
+      <NotificationsBell webhookUrl={ROUTE_SHEET_WEBHOOK_URL} />
     </div>
   );
 }
@@ -2654,7 +2655,6 @@ function HomeHubView({ onNavigate }) {
       <PromotionSlot placement="HOME_FEATURED" variant="list" titleKey="promo.featured" />
       <SongOfTheDayCard />
       <VanPollCard />
-      <NotificationsCard webhookUrl={ROUTE_SHEET_WEBHOOK_URL} />
 
       <button className="hub-card hub-card-atlas" style={art(HUB_ART_ATLAS, 0.0, "auto 104%", "108% 50%")} onClick={() => onNavigate("atlas")}>
         <div className="hub-atlas-fade" />

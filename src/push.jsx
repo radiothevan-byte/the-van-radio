@@ -5,7 +5,7 @@
 // Nothing is asked until the visitor taps the button. The browser subscription is sent to the Apps Script
 // webhook (sheet "Push Subscriptions"); what is actually sent is approved by the owner in the sheet "Push Outbox".
 // Works on Android/desktop browsers; on iPhone/iPad only after "Add to Home Screen" (iOS 16.4+).
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useLang } from "./i18n.jsx";
 import { trackEvent } from "./analytics.js";
 
@@ -54,12 +54,23 @@ async function postWebhook(url, body) {
   return data;
 }
 
-export function NotificationsCard({ webhookUrl }) {
+export function NotificationsBell({ webhookUrl }) {
   const { lang, t } = useLang();
   const [status, setStatus] = useState("loading");   // loading | hidden | ios | off | denied | on
   const [topics, setTopics] = useState(readTopics);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
 
   const register = useCallback(async (sub, list) => {
     await postWebhook(webhookUrl, { form_type: "push_subscribe", subscription: sub.toJSON(), topics: list, lang });
@@ -133,33 +144,60 @@ export function NotificationsCard({ webhookUrl }) {
   }, [topics, disable, register, t]);
 
   if (status === "loading" || status === "hidden") return null;
+  const bell = (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill={status === "on" ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" />
+      {status === "denied" && <path d="M3 3l18 18" />}
+    </svg>
+  );
   return (
-    <section className="content-card push-card" aria-label={t("push.kicker")}>
-      <span className="content-kicker">{t("push.kicker")}</span>
-      {status === "ios" && <p className="content-note">{t("push.ios")}</p>}
-      {status === "denied" && <p className="content-note">{t("push.denied")}</p>}
-      {status === "off" && (
-        <>
-          <div className="content-title">{t("push.title")}</div>
-          <p className="content-note">{t("push.text")}</p>
-          <button type="button" className="push-btn" onClick={enable} disabled={busy}>{t("push.enable")}</button>
-        </>
+    <div className="push-wrap" ref={wrapRef}>
+      <button type="button" className={`top-action-btn push-bell ${status === "on" ? "push-bell-on" : ""}`} onClick={() => setOpen((o) => !o)}
+        aria-label={t("push.kicker")} title={t("push.kicker")} aria-haspopup="dialog" aria-expanded={open}>{bell}</button>
+      {open && (
+        <div className="push-pop" role="dialog" aria-label={t("push.kicker")}>
+          {status === "ios" && <p className="content-note">{t("push.ios")}</p>}
+          {status === "denied" && <p className="content-note">{t("push.denied")}</p>}
+          {status === "off" && (
+            <>
+              <div className="content-title">{t("push.title")}</div>
+              <p className="content-note">{t("push.text")}</p>
+              <button type="button" className="push-btn" onClick={enable} disabled={busy}>{t("push.enable")}</button>
+            </>
+          )}
+          {status === "on" && (
+            <>
+              <div className="content-title">{t("push.on")}</div>
+              <label className="push-row"><input type="checkbox" checked={topics.includes("shows")} onChange={() => toggle("shows")} /><span>{t("push.topic.shows")}</span></label>
+              <label className="push-row"><input type="checkbox" checked={topics.includes("news")} onChange={() => toggle("news")} /><span>{t("push.topic.news")}</span></label>
+              <button type="button" className="push-link" onClick={disable} disabled={busy}>{t("push.disable")}</button>
+            </>
+          )}
+          {error && <p className="push-error" role="alert">{error}</p>}
+        </div>
       )}
-      {status === "on" && (
-        <>
-          <div className="content-title">{t("push.on")}</div>
-          <label className="push-row"><input type="checkbox" checked={topics.includes("shows")} onChange={() => toggle("shows")} /><span>{t("push.topic.shows")}</span></label>
-          <label className="push-row"><input type="checkbox" checked={topics.includes("news")} onChange={() => toggle("news")} /><span>{t("push.topic.news")}</span></label>
-          <button type="button" className="push-link" onClick={disable} disabled={busy}>{t("push.disable")}</button>
-        </>
-      )}
-      {error && <p className="push-error" role="alert">{error}</p>}
-    </section>
+    </div>
   );
 }
 
 export const PUSH_CSS = `
-/* ---- Push notifications card ---- */
+/* ---- Push notifications bell (top bar) ---- */
+.push-wrap { position: relative; display: flex; }
+.push-bell { padding: 8px 10px; }
+.push-bell-on { color: #7fd4ee; border-color: rgba(57,172,208,0.9); }
+/* very narrow phones: the top row is full, so the bell sits on the small row below, left of EL|EN */
+@media (max-width: 360px) {
+  .top-action-bar .push-wrap { position: absolute; top: calc(100% + 8px); right: 74px; }
+  .top-action-bar .push-bell { padding: 4px 9px; }
+  .top-action-bar .push-pop { top: calc(100% + 8px); right: -74px; }
+}
+.push-pop {
+  position: absolute; top: calc(100% + 8px); right: 0; width: min(280px, calc(100vw - 40px)); box-sizing: border-box;
+  padding: 14px 16px 16px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.45); z-index: 30; display: flex; flex-direction: column; text-align: left;
+}
+.push-pop .content-title { font-size: 15px; font-weight: 700; }
+.push-pop .content-note { margin: 6px 0 0; font-size: 13px; line-height: 1.45; color: rgba(242,241,236,0.75); }
 .push-btn {
   margin-top: 10px; align-self: flex-start; padding: 10px 16px; border-radius: 999px; border: 1px solid rgba(57,172,208,0.7);
   background: rgba(10,13,11,0.55); color: var(--text); font-family: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer;
