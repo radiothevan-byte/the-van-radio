@@ -303,17 +303,20 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
 
 export const SONGPLAYER_CSS = `
 .sp-backdrop {
-  position: fixed; inset: 0; z-index: 2000; display: flex; justify-content: center; align-items: flex-end;
+  position: fixed; inset: 0; z-index: 2000; display: flex; justify-content: center; align-items: flex-start;
   background: rgba(3,8,12,0.74); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
 }
 .sp-sheet {
   position: relative; width: 100%; max-width: 460px; box-sizing: border-box; max-height: 100dvh; overflow-y: auto; overflow-x: hidden;
-  padding: 18px 20px calc(22px + env(safe-area-inset-bottom, 0px));
-  border-radius: 26px 26px 0 0; border: 1px solid rgba(46,208,242,0.45); border-bottom: none;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) 20px 24px;
+  border-radius: 0 0 26px 26px; border: 1px solid rgba(46,208,242,0.45); border-top: none;
+  animation: sp-drop 0.28s ease-out;
   background: radial-gradient(120% 60% at 80% 0%, rgba(46,208,242,0.14) 0%, rgba(46,208,242,0) 60%), linear-gradient(170deg, #0d2a37 0%, #08171f 70%);
-  box-shadow: inset 0 0 0 1px rgba(46,208,242,0.12), 0 -10px 40px rgba(0,0,0,0.5);
+  box-shadow: inset 0 0 0 1px rgba(46,208,242,0.12), 0 10px 40px rgba(0,0,0,0.5);
   color: #fff; display: flex; flex-direction: column; align-items: stretch; text-align: center; font-family: 'Inter', -apple-system, sans-serif;
 }
+@keyframes sp-drop { from { transform: translateY(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .sp-sheet { animation: none; } }
 .sp-top { position: relative; display: flex; align-items: center; justify-content: center; min-height: 46px; margin: 0 0 14px; padding: 0 46px; }
 .sp-head { display: inline-flex; align-items: center; gap: clamp(6px, 2.4vw, 12px); max-width: 100%; }
 .sp-star { flex: none; width: clamp(26px, 8.5vw, 40px); height: auto; transform: rotate(-8deg); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35)); }
