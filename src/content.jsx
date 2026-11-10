@@ -5,6 +5,7 @@
 // answer simply renders nothing (Home stays exactly as it was).
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLang } from "./i18n.jsx";
+import { SongPlayerSheet, parseSongLink, SONGPLAYER_CSS } from "./songplayer.jsx";
 
 const CACHE_KEY = "tvr_content_cache_v1";
 const CACHE_FRESH_MS = 5 * 60 * 1000;
@@ -84,17 +85,17 @@ function voteToken() {
   return t;
 }
 
-const ContentContext = createContext({ song: null, poll: null, webhookUrl: "", onEvent: null });
+const ContentContext = createContext({ song: null, poll: null, webhookUrl: "", onEvent: null, myVanSongs: [], onSaveSong: null, onSongPlay: null });
 
 // `onEvent(name, props)` is optional (analytics hook, wired up by the app); it is never required.
-export function ContentProvider({ webhookUrl, onEvent, children }) {
+export function ContentProvider({ webhookUrl, onEvent, myVanSongs, onSaveSong, onSongPlay, children }) {
   const [state, setState] = useState({ song: null, poll: null });
   useEffect(() => {
     let cancelled = false;
     fetchContent(webhookUrl).then((c) => { if (!cancelled) setState(c); }).catch(() => {});
     return () => { cancelled = true; };
   }, [webhookUrl]);
-  const value = useMemo(() => ({ ...state, webhookUrl, onEvent: onEvent || null }), [state, webhookUrl, onEvent]);
+  const value = useMemo(() => ({ ...state, webhookUrl, onEvent: onEvent || null, myVanSongs: myVanSongs || [], onSaveSong: onSaveSong || null, onSongPlay: onSongPlay || null }), [state, webhookUrl, onEvent, myVanSongs, onSaveSong, onSongPlay]);
   return <ContentContext.Provider value={value}>{children}</ContentContext.Provider>;
 }
 
@@ -103,20 +104,37 @@ export function youtubeSearchUrl(song) {
 }
 
 export function SongOfTheDayCard() {
-  const { song, onEvent } = useContext(ContentContext);
+  const { song, onEvent, myVanSongs, onSaveSong, onSongPlay } = useContext(ContentContext);
   const { lang, t } = useLang();
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
   if (!song) return null;
   const note = (lang === "en" ? song.noteEn || song.noteEl : song.noteEl || song.noteEn) || "";
+  const parsed = parseSongLink(song.link);
   const href = song.link || youtubeSearchUrl(song);
+  const songKey = `sotd:${song.id || song.title}`;
+  const saved = (myVanSongs || []).some((x) => x.id === songKey);
+  const openPlayer = () => { setOpen(true); if (onEvent) onEvent("song_of_day_click", { id: song.id }); };
   return (
-    <section className="content-card content-song" aria-label={t("content.song.kicker")}>
+    <section className={`content-card content-song ${parsed ? "content-song-playable" : ""}`} aria-label={t("content.song.kicker")}
+      onClick={parsed ? openPlayer : undefined}>
       <span className="content-kicker">♪ {t("content.song.kicker")}</span>
       <div className="content-title">{song.title}</div>
       {song.artist && <div className="content-artist">{song.artist}</div>}
       {note && <p className="content-note">{note}</p>}
-      <a className="content-cta" href={href} target="_blank" rel="noopener noreferrer" onClick={() => onEvent && onEvent("song_of_day_click", { id: song.id })}>
-        {t("content.song.listen")} <span aria-hidden="true">→</span>
-      </a>
+      {parsed ? (
+        <button type="button" className="content-cta content-cta-btn" onClick={(e) => { e.stopPropagation(); openPlayer(); }}>
+          <span aria-hidden="true">▶</span> {t("content.song.play")}
+        </button>
+      ) : (
+        <a className="content-cta" href={href} target="_blank" rel="noopener noreferrer" onClick={() => onEvent && onEvent("song_of_day_click", { id: song.id })}>
+          {t("content.song.listen")} <span aria-hidden="true">→</span>
+        </a>
+      )}
+      {open && parsed && (
+        <SongPlayerSheet song={song} parsed={parsed} saved={saved} onClose={close} onEvent={onEvent} onPlayStart={onSongPlay}
+          onSave={() => { if (onSaveSong) onSaveSong({ id: songKey, title: song.title, artist: song.artist, musicUrl: song.link, placeName: "" }); }} />
+      )}
     </section>
   );
 }
@@ -181,7 +199,7 @@ export function VanPollCard() {
   );
 }
 
-export const CONTENT_CSS = `
+export const CONTENT_CSS = SONGPLAYER_CSS + `
 /* ---- Content Engine: Song of the Day + Van Poll ---- */
 .content-card {
   position: relative; display: flex; flex-direction: column; gap: 4px; margin: 0 0 14px;
@@ -198,6 +216,8 @@ export const CONTENT_CSS = `
 .content-title { font-family: 'Poppins', sans-serif; font-size: 17px; font-weight: 700; line-height: 1.25; }
 .content-artist { font-size: 13.5px; color: var(--accent); font-weight: 600; }
 .content-note { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: rgba(242,241,236,0.82); }
+.content-song-playable { cursor: pointer; }
+.content-cta-btn { background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
 .content-cta { margin-top: 8px; align-self: flex-start; font-size: 12.5px; font-weight: 700; color: var(--accent); text-decoration: none; }
 .poll-options { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .poll-option {

@@ -3041,7 +3041,7 @@ function TheVanAppInner() {
 
   return (
     <PromotionsProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} actions={promoActions}>
-    <ContentProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} onEvent={trackEvent}>
+    <ContentProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} onEvent={trackEvent} myVanSongs={myVanSongs} onSaveSong={handleSaveSong} onSongPlay={() => setIsPlaying(false)}>
     <div className="app-root">
       <style>{CSS}{PROMO_CSS}{CONTENT_CSS}</style>
       <audio
