@@ -622,6 +622,23 @@ const ROADBOOK_HUB = {
   atlas: { art: () => HUB_ART_ATLAS, icon: () => HUB_ICON_ATLAS, iconW: 36, title: "The Van Atlas", text: "hub.atlas" },
 };
 
+function RoadbookHubButton({ nav, onNavigate }) {
+  const { t } = useLang();
+  const h = ROADBOOK_HUB[nav];
+  if (!h) return null;
+  return (
+    <button className="hub-card hub-card-wide roadbook-hub-btn" onClick={() => onNavigate(nav)}
+      style={{ backgroundImage: `linear-gradient(90deg, rgba(8,23,31,0.86) 0%, rgba(8,23,31,0.55) 55%, rgba(8,23,31,0) 100%), url("${h.art()}")`, backgroundSize: "100% 100%, cover", backgroundPosition: "0 0, 75% 50%", backgroundRepeat: "no-repeat" }}>
+      <div className="hub-card-icon roadbook-hub-icon"><img src={h.icon()} alt="" style={{ width: h.iconW, height: "auto" }} /></div>
+      <div className="hub-card-wide-body">
+        <div className="hub-card-title">{h.title}</div>
+        <div className="hub-card-text hub-card-text-sm">{t(h.text)}</div>
+      </div>
+      <HubArrow />
+    </button>
+  );
+}
+
 function RoadbookSlide({ section, onNavigate, onPickChoice }) {
   const { t, lang } = useLang();
   const en = lang === "en" ? ROADBOOK_EN[section.n] : null;
@@ -640,21 +657,11 @@ function RoadbookSlide({ section, onNavigate, onPickChoice }) {
         ))}
         {section.links && (
           <div className="roadbook-section-links">
-            {section.links.map((l) => {
-              const h = ROADBOOK_HUB[l.nav];
-              if (!h) return <button key={l.nav} className="roadbook-link-btn" onClick={() => onNavigate(l.nav)}>{l.label} →</button>;
-              return (
-                <button key={l.nav} className="hub-card hub-card-wide roadbook-hub-btn" onClick={() => onNavigate(l.nav)}
-                  style={{ backgroundImage: `linear-gradient(90deg, rgba(8,23,31,0.86) 0%, rgba(8,23,31,0.55) 55%, rgba(8,23,31,0) 100%), url("${h.art()}")`, backgroundSize: "100% 100%, cover", backgroundPosition: "0 0, 75% 50%", backgroundRepeat: "no-repeat" }}>
-                  <div className="hub-card-icon roadbook-hub-icon"><img src={h.icon()} alt="" style={{ width: h.iconW, height: "auto" }} /></div>
-                  <div className="hub-card-wide-body">
-                    <div className="hub-card-title">{h.title}</div>
-                    <div className="hub-card-text hub-card-text-sm">{t(h.text)}</div>
-                  </div>
-                  <HubArrow />
-                </button>
-              );
-            })}
+            {section.links.map((l) => (
+              ROADBOOK_HUB[l.nav]
+                ? <RoadbookHubButton key={l.nav} nav={l.nav} onNavigate={onNavigate} />
+                : <button key={l.nav} className="roadbook-link-btn" onClick={() => onNavigate(l.nav)}>{l.label} →</button>
+            ))}
           </div>
         )}
         {section.final && (
@@ -781,8 +788,10 @@ function RoadbookView({ onNavigate }) {
         <div className="roadbook-choice-overlay fade-in" onClick={() => setChoiceOpen(false)}>
           <div className="roadbook-choice-card" onClick={(e) => e.stopPropagation()}>
             <div className="roadbook-choice-title">{t("rb.choose")}</div>
-            <button className="pill-btn" onClick={() => onNavigate("route")}>🚐 Pick the Route</button>
-            <button className="pill-btn pill-btn-ghost" onClick={() => onNavigate("postcards")}>💌 Postcards from the Road</button>
+            <div className="roadbook-choice-list">
+              <RoadbookHubButton nav="route" onNavigate={onNavigate} />
+              <RoadbookHubButton nav="postcards" onNavigate={onNavigate} />
+            </div>
             <button className="pill-btn pill-btn-ghost" onClick={() => setChoiceOpen(false)}>{t("rb.cancel")}</button>
           </div>
         </div>
@@ -4204,6 +4213,9 @@ const CSS = `
   border-radius: 20px; padding: 24px; width: 100%; max-width: 340px;
   display: flex; flex-direction: column; gap: 10px;
 }
+.roadbook-choice-card { max-width: 380px; }
+.roadbook-choice-list { display: flex; flex-direction: column; gap: 10px; }
+.roadbook-choice-list .roadbook-hub-btn { margin-bottom: 0; min-height: 66px; padding: 9px 14px 9px 10px; gap: 8px; }
 .roadbook-choice-title { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 6px; text-align: center; }
 @media (prefers-reduced-motion: reduce) {
   .roadbook-track { scroll-behavior: auto; }
