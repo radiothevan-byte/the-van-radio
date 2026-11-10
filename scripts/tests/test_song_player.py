@@ -54,7 +54,10 @@ with sync_playwright() as p:
     o=pg.evaluate("window.__yt.opts")
     check(o["videoId"]=="AaG9nV9gzdU" and o["host"]=="https://www.youtube-nocookie.com" and o["playerVars"]["playsinline"]==1 and o["playerVars"]["controls"]==0,"YouTube id from the Sheet link (list param ignored), nocookie host, playsinline")
     check(pg.evaluate("document.body.style.overflow")=="hidden","page scroll locked while open")
-    check(pg.locator(".sp-time").nth(1).inner_text()=="3:42","duration shown (3:42)")
+    check(pg.locator(".sp-time").nth(1).inner_text()=="03:42" and pg.locator(".sp-time").first.inner_text()=="00:00","times shown like the mockup (00:00 / 03:42)")
+    hd=pg.locator(".sp-head").inner_text()
+    check(hd.strip()=="Song of the Day" and "Atlas" not in pg.locator(".sp-sheet").inner_text() and pg.locator(".sp-star").count()==1,"header = star + 'Song of the Day', no 'The Van Atlas'")
+    check(pg.locator(".sp-skip").count()==2,"two skip buttons flank play")
     # play / pause / seek
     pg.locator(".sp-play").click(); pg.wait_for_timeout(900)
     check("play" in pg.evaluate("window.__yt.calls") and pg.locator(".sp-play").get_attribute("aria-label")=="Παύση","play starts, button becomes Pause")
@@ -63,6 +66,8 @@ with sync_playwright() as p:
     check(any(c.startswith("seek:") for c in pg.evaluate("window.__yt.calls")),"seek slider calls seekTo")
     pg.locator(".sp-play").click(); pg.wait_for_timeout(200)
     check("pause" in pg.evaluate("window.__yt.calls"),"pause works")
+    pg.locator(".sp-skip").nth(1).click(); pg.wait_for_timeout(150)
+    check(any(c.startswith("seek:") for c in pg.evaluate("window.__yt.calls")[-2:]),"+15s button seeks")
     # save toggle
     pg.locator(".sp-save").click(); pg.wait_for_timeout(200)
     check("Αποθηκεύτηκε" in pg.locator(".sp-save").inner_text() and pg.locator(".sp-sheet").count()==1,"save to My Van: button shows saved, sheet stays open (no re-open loop)")
@@ -83,7 +88,7 @@ with sync_playwright() as p:
     check(not pg.errs,"no page errors "+str(pg.errs)); ctx.close()
     # 3) EN labels
     ctx,pg=new(song("https://youtu.be/AaG9nV9gzdU")); pg.add_init_script("try{localStorage.setItem('tvr_lang','en')}catch(e){}"); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song")
-    check("Play" in pg.locator(".content-cta").inner_text(),"EN: card says Play"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet")
+    check("Play" in pg.locator(".content-cta").inner_text(),"EN: card says Play"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.wait_for_timeout(500)
     check("Save to My Van" in pg.locator(".sp-save").inner_text() and pg.evaluate("window.__yt.opts.videoId")=="AaG9nV9gzdU","EN: labels + youtu.be link parsed"); ctx.close()
     # 4) embed not allowed (error 150) -> message + open link, no crash
     ctx,pg=new(song(YT),mode="error150"); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.wait_for_timeout(300); pg.locator(".sp-play").click(); pg.wait_for_timeout(300)

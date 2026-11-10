@@ -57,7 +57,7 @@ function loadYouTubeApi() {
 
 function fmt(sec) {
   const n = Number.isFinite(sec) && sec > 0 ? Math.floor(sec) : 0;
-  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+  return `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 }
 
 function openUrl(link, parsed) {
@@ -67,8 +67,26 @@ function openUrl(link, parsed) {
 
 function HeartIcon({ filled }) {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className="sp-heart" width="30" height="30" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
+    </svg>
+  );
+}
+
+function StarIcon() {
+  return (
+    <svg className="sp-star" width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 2.6l2.9 6 6.5.9-4.7 4.6 1.1 6.5L12 17.5l-5.8 3.1 1.1-6.5L2.6 9.5l6.5-.9z" fill="#ffd23f" stroke="#ffd23f" strokeWidth="1.6" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SkipIcon({ dir }) {
+  return (
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      style={dir > 0 ? { transform: "scaleX(-1)" } : undefined}>
+      <path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" />
+      <text x="12" y="15.4" textAnchor="middle" fontSize="7.6" fontWeight="700" fill="currentColor" stroke="none" style={dir > 0 ? { transform: "scaleX(-1)", transformOrigin: "12px 12px" } : undefined}>15</text>
     </svg>
   );
 }
@@ -91,6 +109,14 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
     const prevOverflow = document.body.style.overflow;
     const prevFocus = document.activeElement;
     document.body.style.overflow = "hidden";
+    try {
+      if (!document.getElementById("sp-fonts")) {
+        const l = document.createElement("link");
+        l.id = "sp-fonts"; l.rel = "stylesheet";
+        l.href = "https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Alegreya:ital,wght@1,500;1,700&display=swap";
+        document.head.appendChild(l);
+      }
+    } catch (e) { /* the player works with system fonts */ }
     const onKey = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
     try { if (closeRef.current) closeRef.current.focus(); } catch (e) { /* ignore */ }
@@ -164,6 +190,15 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
     try { if (playerRef.current) playerRef.current.seekTo(v, true); } catch (er) { /* ignore */ }
   };
 
+  const skip = (delta) => {
+    try {
+      const p = playerRef.current; if (!p) return;
+      const d = p.getDuration() || dur || 0;
+      const v = Math.max(0, Math.min(d || 1e9, (p.getCurrentTime() || 0) + delta));
+      p.seekTo(v, true); setCur(v);
+    } catch (e) { /* ignore */ }
+  };
+  const pct = dur ? Math.min(100, Math.max(0, (cur / dur) * 100)) : 0;
   const isYt = parsed.kind === "youtube";
   const playing = state === "playing";
   return createPortal(
@@ -171,7 +206,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
       onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}>
       <div className="sp-sheet">
         <div className="sp-top">
-          <span className="sp-kicker"><span aria-hidden="true">★</span> {t("content.song.kicker")}</span>
+          <div className="sp-head"><StarIcon /><span className="sp-head-text">Song of the Day</span></div>
           <button type="button" className="sp-close" onClick={onClose} ref={closeRef} aria-label={t("content.song.close")}>×</button>
         </div>
 
@@ -196,10 +231,11 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
           <>
             <div className="sp-progress">
               <span className="sp-time">{fmt(cur)}</span>
-              <input type="range" className="sp-range" min="0" max={dur || 1} step="1" value={Math.min(cur, dur || 1)} onChange={seek} disabled={!dur} aria-label={t("content.song.seek")} />
+              <input type="range" className="sp-range" style={{ "--pct": pct + "%" }} min="0" max={dur || 1} step="1" value={Math.min(cur, dur || 1)} onChange={seek} disabled={!dur} aria-label={t("content.song.seek")} />
               <span className="sp-time">{fmt(dur)}</span>
             </div>
             <div className="sp-controls">
+              <button type="button" className="sp-skip" onClick={() => skip(-15)} disabled={state === "loading"} aria-label={t("content.song.back15")}><SkipIcon dir={-1} /></button>
               <button type="button" className="sp-play" onClick={toggle} disabled={state === "loading"} aria-label={playing ? t("content.song.pause") : t("content.song.play")}>
                 {playing ? (
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
@@ -207,6 +243,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
                   <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
                 )}
               </button>
+              <button type="button" className="sp-skip" onClick={() => skip(15)} disabled={state === "loading"} aria-label={t("content.song.fwd15")}><SkipIcon dir={1} /></button>
             </div>
             {needsTap && !playing && <p className="sp-hint" role="status">{t("content.song.tapHint")}</p>}
           </>
@@ -215,7 +252,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
         {parsed.kind === "spotify" && <p className="sp-hint">{t("content.song.spotifyNote")}</p>}
 
         <button type="button" className={`sp-save ${saved ? "sp-save-on" : ""}`} onClick={onSave} aria-pressed={saved}>
-          <HeartIcon filled={saved} /> {saved ? t("content.song.saved") : t("content.song.save")}
+          <HeartIcon filled /> <span>{saved ? t("content.song.saved") : t("content.song.save")}</span>
         </button>
         <a className="sp-open" href={link} target="_blank" rel="noopener noreferrer">
           {parsed.kind === "spotify" ? t("content.song.openSpotify") : t("content.song.openYoutube")} <span aria-hidden="true">↗</span>
@@ -229,44 +266,72 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
 export const SONGPLAYER_CSS = `
 .sp-backdrop {
   position: fixed; inset: 0; z-index: 70; display: flex; justify-content: center; align-items: flex-end;
-  background: rgba(3,8,12,0.72); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  background: rgba(3,8,12,0.74); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
 }
 .sp-sheet {
-  width: 100%; max-width: 460px; box-sizing: border-box; max-height: 100dvh; overflow-y: auto;
-  padding: 16px 18px calc(22px + env(safe-area-inset-bottom, 0px));
-  border-radius: 24px 24px 0 0; border: 1px solid rgba(46,208,242,0.38); border-bottom: none;
-  background: linear-gradient(160deg, #0c2430 0%, #08171f 75%); color: var(--text);
-  display: flex; flex-direction: column; align-items: stretch; text-align: center;
+  position: relative; width: 100%; max-width: 460px; box-sizing: border-box; max-height: 100dvh; overflow-y: auto; overflow-x: hidden;
+  padding: 18px 20px calc(22px + env(safe-area-inset-bottom, 0px));
+  border-radius: 26px 26px 0 0; border: 1px solid rgba(46,208,242,0.45); border-bottom: none;
+  background: radial-gradient(120% 60% at 80% 0%, rgba(46,208,242,0.14) 0%, rgba(46,208,242,0) 60%), linear-gradient(170deg, #0d2a37 0%, #08171f 70%);
+  box-shadow: inset 0 0 0 1px rgba(46,208,242,0.12), 0 -10px 40px rgba(0,0,0,0.5);
+  color: #fff; display: flex; flex-direction: column; align-items: stretch; text-align: center;
 }
-.sp-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.sp-kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #ffd23f; }
+.sp-top { position: relative; display: flex; align-items: center; justify-content: center; min-height: 46px; margin: 0 0 14px; padding: 0 46px; }
+.sp-head { display: inline-flex; align-items: center; gap: clamp(6px, 2.4vw, 12px); max-width: 100%; }
+.sp-star { flex: none; width: clamp(26px, 8.5vw, 40px); height: auto; transform: rotate(-8deg); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35)); }
+.sp-head-text {
+  position: relative; font-family: 'Caveat', 'Dancing Script', cursive; font-size: clamp(24px, 7.4vw, 34px); font-weight: 700; line-height: 1.1;
+  color: #fff; padding-bottom: 7px; white-space: nowrap;
+}
+.sp-head-text::after {
+  content: ""; position: absolute; left: -2px; right: -2px; bottom: 0; height: 7px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 10' preserveAspectRatio='none'><path d='M3 6 C 50 2, 100 8, 160 4 S 250 6, 297 3' fill='none' stroke='%23ffd23f' stroke-width='4' stroke-linecap='round'/></svg>") center / 100% 100% no-repeat;
+}
 .sp-close {
-  width: 36px; height: 36px; border-radius: 50%; border: 1px solid rgba(57,172,208,0.5); background: rgba(10,13,11,0.5);
-  color: var(--text); font-size: 22px; line-height: 1; cursor: pointer;
+  position: absolute; right: -6px; top: -6px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(57,172,208,0.5);
+  background: rgba(10,13,11,0.45); color: #fff; font-size: 21px; line-height: 1; cursor: pointer;
 }
-.sp-cover { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 16px; overflow: hidden; background: #02080c; border: 1px solid rgba(255,255,255,0.14); }
+.sp-cover {
+  position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 22px; overflow: hidden; background: #02080c;
+  border: 2px solid rgba(255,255,255,0.88); box-shadow: 0 8px 26px rgba(0,0,0,0.45), 0 0 0 4px rgba(46,208,242,0.10);
+}
 .sp-yt, .sp-yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .sp-yt iframe { pointer-events: none; }
 .sp-cover-tap .sp-yt iframe { pointer-events: auto; }
 .sp-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 26px; }
-.sp-spotify { border-radius: 14px; overflow: hidden; }
-.sp-spotify iframe { display: block; border-radius: 14px; }
-.sp-title { margin-top: 16px; font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
-.sp-artist { margin-top: 2px; font-size: 14.5px; font-weight: 600; color: var(--accent); overflow-wrap: anywhere; }
-.sp-progress { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
-.sp-time { min-width: 38px; font-size: 12.5px; color: var(--accent); font-variant-numeric: tabular-nums; }
-.sp-range { flex: 1; min-width: 0; accent-color: #ffd23f; height: 28px; cursor: pointer; }
-.sp-controls { display: flex; justify-content: center; margin-top: 6px; }
+.sp-spotify { border-radius: 16px; overflow: hidden; }
+.sp-spotify iframe { display: block; border-radius: 16px; }
+.sp-title {
+  margin-top: 20px; font-family: 'Caveat', 'Alegreya', Georgia, 'Times New Roman', serif; font-style: italic; font-size: 32px; font-weight: 700;
+  line-height: 1.15; color: #fff; overflow-wrap: anywhere;
+}
+.sp-artist { margin-top: 4px; font-size: 15.5px; font-weight: 500; color: #fff; overflow-wrap: anywhere; }
+.sp-progress { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+.sp-time { min-width: 44px; font-size: 14px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.sp-range {
+  --pct: 0%; flex: 1; min-width: 0; height: 28px; margin: 0; background: transparent; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+}
+.sp-range::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(to right, #ffd23f var(--pct), rgba(57,172,208,0.75) var(--pct)); }
+.sp-range::-moz-range-track { height: 4px; border-radius: 4px; background: rgba(57,172,208,0.75); }
+.sp-range::-moz-range-progress { height: 4px; border-radius: 4px; background: #ffd23f; }
+.sp-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; margin-top: -8px; border-radius: 50%; background: #ffd23f; border: none; box-shadow: 0 1px 5px rgba(0,0,0,0.5); }
+.sp-range::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #ffd23f; border: none; box-shadow: 0 1px 5px rgba(0,0,0,0.5); }
+.sp-range:disabled { opacity: 0.6; cursor: default; }
+.sp-controls { display: flex; justify-content: center; align-items: center; gap: 34px; margin-top: 10px; }
 .sp-play {
-  width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--text); background: transparent; color: var(--text);
+  width: 70px; height: 70px; border-radius: 50%; border: 3px solid #fff; background: transparent; color: #fff;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
 }
-.sp-play:disabled { opacity: 0.45; cursor: default; }
-.sp-hint { margin: 10px 0 0; font-size: 12.5px; line-height: 1.45; color: rgba(242,241,236,0.72); }
+.sp-skip { width: 48px; height: 48px; border: none; background: transparent; color: rgba(255,255,255,0.78); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sp-play:disabled, .sp-skip:disabled { opacity: 0.45; cursor: default; }
+.sp-hint { margin: 12px 0 0; font-size: 12.5px; line-height: 1.45; color: rgba(255,255,255,0.72); }
 .sp-save {
-  margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 16px; border-radius: 999px;
-  border: 2px solid #ffd23f; background: transparent; color: #ffd23f; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+  margin: 20px auto 0; width: 100%; max-width: 330px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 12px 22px; border-radius: 999px; border: 2px solid #ffd23f; background: rgba(8,23,31,0.7); color: #fff; cursor: pointer;
+  font-family: 'Caveat', 'Alegreya', Georgia, serif; font-style: italic; font-size: 21px; font-weight: 700; line-height: 1.15; text-align: left;
 }
-.sp-save-on { background: rgba(255,210,63,0.14); }
-.sp-open { margin-top: 12px; font-size: 12.5px; font-weight: 700; color: var(--accent); text-decoration: none; }
+.sp-heart { flex: none; color: #ffd23f; }
+.sp-save-on { background: rgba(255,210,63,0.16); }
+.sp-open { margin-top: 14px; font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.6); text-decoration: none; }
 `;
