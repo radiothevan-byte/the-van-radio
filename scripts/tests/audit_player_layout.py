@@ -24,7 +24,7 @@ with sync_playwright() as p:
               return hnd
             pg.route("**/*",mkh(S)); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.wait_for_timeout(700)
             m=pg.evaluate("""()=>{const r=s=>{const e=document.querySelector(s);if(!e)return null;const b=e.getBoundingClientRect();return [Math.round(b.x),Math.round(b.y),Math.round(b.width),Math.round(b.height)]};
-              const sh=document.querySelector('.sp-sheet');return {vw:innerWidth,vh:innerHeight,sheet:r('.sp-sheet'),close:r('.sp-close'),yt:r('.sp-yt iframe')||r('.sp-yt'),play:r('.sp-play'),open:r('.sp-open'),save:r('.sp-save'),share:r('.sp-share'),
+              const sh=document.querySelector('.sp-sheet');return {vw:innerWidth,vh:innerHeight,sheet:r('.sp-sheet'),close:r('.sp-close'),yt:r('.sp-yt iframe')||r('.sp-yt'),cover:r('.sp-cover'),ytw:(document.querySelector('.sp-yt iframe')||{}).offsetWidth,yth:(document.querySelector('.sp-yt iframe')||{}).offsetHeight,play:r('.sp-play'),open:r('.sp-open'),save:r('.sp-save'),share:r('.sp-share'),
               scrolls:sh.scrollHeight>sh.clientHeight+1,hscroll:document.documentElement.scrollWidth-innerWidth,sheetHscroll:sh.scrollWidth-sh.clientWidth}}""")
             sh=m["sheet"]; issues=[]
             if sh[0]<0 or sh[0]+sh[2]>m["vw"]+0.5: issues.append("sheet outside horizontally")
@@ -34,8 +34,12 @@ with sync_playwright() as p:
                 if not e: issues.append(k+" missing"); continue
                 if e[0]<0 or e[0]+e[2]>m["vw"]+0.5: issues.append(k+" outside horizontally")
                 if e[1]<0 or (e[1]+e[3]>m["vh"]+0.5 and not m["scrolls"]): issues.append(k+" below screen")
+            cv=m["cover"]; yt=m["yt"]
+            if cv and yt:
+                if abs(yt[2]-(cv[2]-4))>3 or abs(yt[3]-(cv[3]-4))>3: issues.append("video not filling frame %s vs %s"%(yt,cv))
+                if (m["yth"] or 0)<200: issues.append("iframe layout height %s <200"%m["yth"])
             if m["hscroll"]>0 or m["sheetHscroll"]>0: issues.append("horizontal overflow")
-            print("%-14s %4dx%-4d %-4s sheet=%s yt=%s scroll=%s %s"%(name,w,h,"LONG" if title==LONG else "norm",sh,m["yt"],m["scrolls"],"ISSUES: "+"; ".join(issues) if issues else "ok"))
+            print("%-14s %4dx%-4d %-4s sheet=%s yt=%s layout=%sx%s scroll=%s %s"%(name,w,h,"LONG" if title==LONG else "norm",sh,m["yt"],m["ytw"],m["yth"],m["scrolls"],"ISSUES: "+"; ".join(issues) if issues else "ok"))
             if title==LONG and name in("iPhone SE","landscape","iPad","iPhone 14"): pg.screenshot(path="audit_%s.png"%name.replace(" ","_"))
             ctx.close()
     b.close()

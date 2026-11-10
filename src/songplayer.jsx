@@ -352,7 +352,10 @@ export const SONGPLAYER_CSS = `
   position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 22px; overflow: hidden; background: #02080c;
   border: 2px solid rgba(255,255,255,0.88); box-shadow: 0 8px 26px rgba(0,0,0,0.45), 0 0 0 4px rgba(46,208,242,0.10);
 }
-.sp-yt, .sp-yt iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.sp-yt { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* YouTube lays its player out for the iframe's own size and clips its overlays when that is smaller than ~200px high
+   (a phone-width 16:9 box is only ~185px). So the iframe is rendered 1/0.65 larger and scaled down to exactly fill the frame. */
+.sp-yt iframe { position: absolute; left: 0; top: 0; width: 153.846%; height: 153.846%; border: 0; transform: scale(0.65); transform-origin: 0 0; }
 .sp-yt iframe { pointer-events: none; }
 .sp-cover-tap .sp-yt iframe { pointer-events: auto; }
 .sp-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 26px; }
