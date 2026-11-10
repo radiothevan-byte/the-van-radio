@@ -67,7 +67,7 @@ function openUrl(link, parsed) {
 
 function HeartIcon({ filled }) {
   return (
-    <svg className="sp-heart" width="30" height="30" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className="sp-heart" width="20" height="20" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
     </svg>
   );
@@ -252,7 +252,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
         {parsed.kind === "spotify" && <p className="sp-hint">{t("content.song.spotifyNote")}</p>}
 
         <button type="button" className={`sp-save ${saved ? "sp-save-on" : ""}`} onClick={onSave} aria-pressed={saved}>
-          <HeartIcon filled /> <span>{saved ? t("content.song.saved") : t("content.song.save")}</span>
+          <HeartIcon filled={saved} /> <span>{saved ? t("content.song.saved") : t("content.song.save")}</span>
         </button>
         <a className="sp-open" href={link} target="_blank" rel="noopener noreferrer">
           {parsed.kind === "spotify" ? t("content.song.openSpotify") : t("content.song.openYoutube")} <span aria-hidden="true">↗</span>
@@ -327,11 +327,11 @@ export const SONGPLAYER_CSS = `
 .sp-play:disabled, .sp-skip:disabled { opacity: 0.45; cursor: default; }
 .sp-hint { margin: 12px 0 0; font-size: 12.5px; line-height: 1.45; color: rgba(255,255,255,0.72); }
 .sp-save {
-  margin: 20px auto 0; width: 100%; max-width: 330px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; gap: 14px;
-  padding: 12px 22px; border-radius: 999px; border: 2px solid #ffd23f; background: rgba(8,23,31,0.7); color: #fff; cursor: pointer;
-  font-family: 'Caveat', 'Alegreya', Georgia, serif; font-style: italic; font-size: 21px; font-weight: 700; line-height: 1.15; text-align: left;
+  margin: 18px auto 0; width: auto; max-width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(255,210,63,0.5); background: transparent; color: rgba(255,255,255,0.85); cursor: pointer;
+  font-family: 'Caveat', 'Alegreya', Georgia, serif; font-style: italic; font-size: 17px; font-weight: 600; line-height: 1.15; text-align: left;
 }
 .sp-heart { flex: none; color: #ffd23f; }
-.sp-save-on { background: rgba(255,210,63,0.16); }
+.sp-save-on { border-color: rgba(255,210,63,0.85); background: rgba(255,210,63,0.1); color: #fff; }
 .sp-open { margin-top: 14px; font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.6); text-decoration: none; }
 `;

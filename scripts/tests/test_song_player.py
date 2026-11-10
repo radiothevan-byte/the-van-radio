@@ -68,8 +68,11 @@ with sync_playwright() as p:
     check("pause" in pg.evaluate("window.__yt.calls"),"pause works")
     pg.locator(".sp-skip").nth(1).click(); pg.wait_for_timeout(150)
     check(any(c.startswith("seek:") for c in pg.evaluate("window.__yt.calls")[-2:]),"+15s button seeks")
-    # save toggle
+    # save toggle: heart empty -> filled
+    hf=lambda: pg.locator(".sp-heart").get_attribute("fill")
+    check(hf()=="none" and pg.locator(".sp-save").get_attribute("aria-pressed")=="false","not saved: heart is EMPTY (outline only)")
     pg.locator(".sp-save").click(); pg.wait_for_timeout(200)
+    check(hf()=="currentColor" and pg.locator(".sp-save").get_attribute("aria-pressed")=="true","saved: heart is FILLED with colour")
     check("Αποθηκεύτηκε" in pg.locator(".sp-save").inner_text() and pg.locator(".sp-sheet").count()==1,"save to My Van: button shows saved, sheet stays open (no re-open loop)")
     saved=pg.evaluate("JSON.parse(localStorage.getItem('tvr_my_van_songs')||'[]')")
     check(len(saved)==1 and saved[0]["id"]=="sotd:sotd-test" and saved[0]["musicUrl"]==YT,"song stored in My Van with its link: %s"%saved)
@@ -84,7 +87,7 @@ with sync_playwright() as p:
     pg.locator(".content-song").click(); pg.wait_for_selector(".sp-sheet"); pg.mouse.click(190,20); pg.wait_for_timeout(200); check(pg.locator(".sp-sheet").count()==0,"tap on the dark backdrop closes")
     # unsave
     pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.locator(".sp-save").click(); pg.wait_for_timeout(150)
-    check(pg.evaluate("JSON.parse(localStorage.getItem('tvr_my_van_songs')||'[]')").__len__()==0,"second tap un-saves")
+    check(pg.evaluate("JSON.parse(localStorage.getItem('tvr_my_van_songs')||'[]')").__len__()==0 and hf()=="none","second tap un-saves and the heart empties again")
     check(not pg.errs,"no page errors "+str(pg.errs)); ctx.close()
     # 3) EN labels
     ctx,pg=new(song("https://youtu.be/AaG9nV9gzdU")); pg.add_init_script("try{localStorage.setItem('tvr_lang','en')}catch(e){}"); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song")
