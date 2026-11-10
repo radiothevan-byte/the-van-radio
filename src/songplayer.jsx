@@ -100,7 +100,9 @@ function SkipIcon({ dir }) {
   );
 }
 
-export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent, onPlayStart }) {
+// `onSave` is optional (no save button without it); `heading` is the handwritten title at the top;
+// `trackPlay` is false for songs that are not the Song of the Day (no per-song analytics for those).
+export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent, onPlayStart, heading = "Song of the Day", trackPlay = true }) {
   const { t } = useLang();
   const mountRef = useRef(null);
   const playerRef = useRef(null);
@@ -205,7 +207,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
     try {
       if (state === "playing") { p.pauseVideo(); return; }
       if (onPlayStart) onPlayStart();
-      if (!playedOnce.current) { playedOnce.current = true; if (onEvent) onEvent("song_of_day_play", { id: song.id }); }
+      if (!playedOnce.current) { playedOnce.current = true; if (trackPlay && onEvent) onEvent("song_of_day_play", { id: song.id }); }
       p.playVideo();
       // Some phones only start playback from a tap on the video itself: if nothing started, let that tap through.
       clearTimeout(tapTimer.current);
@@ -235,7 +237,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
       onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}>
       <div className="sp-sheet">
         <div className="sp-top">
-          <div className="sp-head"><StarIcon /><span className="sp-head-text">Song of the Day</span></div>
+          <div className="sp-head"><StarIcon /><span className="sp-head-text">{heading}</span></div>
           <button type="button" className="sp-close" onClick={onClose} ref={closeRef} aria-label={t("content.song.close")}>×</button>
         </div>
 
@@ -281,9 +283,11 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
         {parsed.kind === "spotify" && <p className="sp-hint">{t("content.song.spotifyNote")}</p>}
 
         <div className="sp-actions">
-          <button type="button" className={`sp-save ${saved ? "sp-save-on" : ""}`} onClick={onSave} aria-pressed={saved}>
-            <HeartIcon filled={saved} /> <span>{saved ? t("content.song.saved") : t("content.song.save")}</span>
-          </button>
+          {onSave && (
+            <button type="button" className={`sp-save ${saved ? "sp-save-on" : ""}`} onClick={onSave} aria-pressed={saved}>
+              <HeartIcon filled={saved} /> <span>{saved ? t("content.song.saved") : t("content.song.save")}</span>
+            </button>
+          )}
           <button type="button" className="sp-share" onClick={handleShare}>
             <ShareIcon /> <span>{shareCopied ? t("share.copied") : t("content.song.share")}</span>
           </button>
@@ -299,7 +303,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
 
 export const SONGPLAYER_CSS = `
 .sp-backdrop {
-  position: fixed; inset: 0; z-index: 70; display: flex; justify-content: center; align-items: flex-end;
+  position: fixed; inset: 0; z-index: 2000; display: flex; justify-content: center; align-items: flex-end;
   background: rgba(3,8,12,0.74); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
 }
 .sp-sheet {

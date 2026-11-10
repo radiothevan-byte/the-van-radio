@@ -16,7 +16,7 @@ import "leaflet/dist/leaflet.css";
 import { LangProvider, LangToggle, useLang, DICT, placeLabel } from "./i18n.jsx";
 import { ROADBOOK_EN } from "./i18n-screens.js";
 import { shareLink, journeyShareUrl, postcardShareUrl } from "./share.js";
-import { ContentProvider, SongOfTheDayCard, VanPollCard, CONTENT_CSS } from "./content.jsx";
+import { ContentProvider, SongOfTheDayCard, VanPollCard, SongPlayLink, CONTENT_CSS } from "./content.jsx";
 import { trackEvent, trackReturningVisit } from "./analytics.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
 
@@ -525,7 +525,9 @@ function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFa
                   {s.placeName && <div className="myvan-song-sub">📍 {s.placeName}</div>}
                 </div>
                 <div className="myvan-song-actions">
-                  {s.musicUrl && <a className="myvan-song-link" href={s.musicUrl} target="_blank" rel="noreferrer">▶</a>}
+                  {s.musicUrl && (
+                    <SongPlayLink className="myvan-song-link" song={{ id: s.id, title: s.title, artist: s.artist, link: s.musicUrl }} heading="My Van" ariaLabel={t("content.song.play")}>▶</SongPlayLink>
+                  )}
                   <button className="myvan-song-remove" onClick={() => onRemoveSong(s.id)}><X size={16} /></button>
                 </div>
               </div>
@@ -2382,7 +2384,12 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
         {hasSong && <div className="atlas-entry-song">🎵 {entry.songTitle}{entry.artist ? ` — ${entry.artist}` : ""}</div>}
         {entry.story && <div className="atlas-entry-story">{entry.story}</div>}
         <div className="atlas-entry-actions">
-          {entry.musicUrl && <a className="atlas-entry-link" href={entry.musicUrl} target="_blank" rel="noreferrer">{t("atlas.listen")}</a>}
+          {entry.musicUrl && (
+            <SongPlayLink className="atlas-entry-link" song={{ id: songId, title: entry.songTitle || entry.placeName || "", artist: entry.artist, link: entry.musicUrl }}
+              heading="Van Atlas" saved={saved} onSave={hasSong ? () => onSaveSong({ id: songId, title: entry.songTitle, artist: entry.artist, musicUrl: entry.musicUrl, placeName: entry.placeName }) : undefined}>
+              {t("atlas.listen")}
+            </SongPlayLink>
+          )}
           {hasSong && (
             <button
               className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
@@ -2411,7 +2418,11 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
       {hasSong && <div className="atlas-entry-song">🎵 {entry.songTitle}{entry.artist ? ` — ${entry.artist}` : ""}</div>}
       {entry.displayName && <div className="atlas-entry-byline">— {entry.displayName}</div>}
       <div className="atlas-entry-actions">
-        {entry.musicUrl && <a className="atlas-entry-link" href={entry.musicUrl} target="_blank" rel="noreferrer">{t("atlas.listen")}</a>}
+        {entry.musicUrl && (
+          <SongPlayLink className="atlas-entry-link" song={{ id: `pc-${entry.id}`, title: entry.songTitle || entry.placeName || "", artist: entry.artist, link: entry.musicUrl }} heading="Van Atlas">
+            {t("atlas.listen")}
+          </SongPlayLink>
+        )}
         {canShare && (
           <button className="atlas-entry-save" onClick={handleShare}>{shareCopied ? t("share.copied") : t("share.button")}</button>
         )}

@@ -103,6 +103,29 @@ export function youtubeSearchUrl(song) {
   return "https://www.youtube.com/results?search_query=" + encodeURIComponent(`${song.title} ${song.artist}`.trim());
 }
 
+// A "play" control for any saved / Atlas song: opens the same in-app player as the Song of the Day.
+// Links that cannot be played inside the app (not YouTube / Spotify) keep opening in a new tab, as before.
+// Renders `children` as the label; `className` lets the caller keep its own look.
+export function SongPlayLink({ song, className, children, heading, saved, onSave, ariaLabel, fallbackHref }) {
+  const { onEvent, onSongPlay } = useContext(ContentContext);
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const parsed = parseSongLink(song && song.link);
+  const href = (song && song.link) || fallbackHref || "";
+  if (!parsed) {
+    return href ? <a className={className} href={href} target="_blank" rel="noreferrer" aria-label={ariaLabel}>{children}</a> : null;
+  }
+  return (
+    <>
+      <button type="button" className={className} onClick={(e) => { e.stopPropagation(); setOpen(true); }} aria-label={ariaLabel}>{children}</button>
+      {open && (
+        <SongPlayerSheet song={song} parsed={parsed} saved={!!saved} onSave={onSave} onClose={close} onEvent={onEvent} onPlayStart={onSongPlay}
+          heading={heading} trackPlay={false} />
+      )}
+    </>
+  );
+}
+
 export function SongOfTheDayCard() {
   const { song, onEvent, myVanSongs, onSaveSong, onSongPlay } = useContext(ContentContext);
   const { lang, t } = useLang();
@@ -200,6 +223,8 @@ export function VanPollCard() {
 }
 
 export const CONTENT_CSS = SONGPLAYER_CSS + `
+button.myvan-song-link, button.atlas-entry-link { background: none; border: 0; padding: 0; margin: 0; cursor: pointer; font-family: inherit; text-align: inherit; }
+button.myvan-song-link { padding: 4px 6px; }
 /* ---- Content Engine: Song of the Day + Van Poll ---- */
 .content-card {
   position: relative; display: flex; flex-direction: column; gap: 4px; margin: 0 0 14px;
