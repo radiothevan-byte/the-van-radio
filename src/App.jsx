@@ -349,9 +349,9 @@ const ROADBOOK_SECTIONS = [
     ],
     bg: ROADBOOK_BG_06,
     links: [
-      { label: "🚐 Pick the Route", nav: "route" },
-      { label: "💌 Postcards from the Road", nav: "postcards" },
-      { label: "🗺️ Van Atlas", nav: "atlas" },
+      { label: "Pick the Route", nav: "route" },
+      { label: "Postcards from the Road", nav: "postcards" },
+      { label: "The Van Atlas", nav: "atlas" },
     ],
   },
   {
@@ -615,6 +615,30 @@ function JourneyDetail({ journey, isCurrent, isPlaying, isFav, onPlay, onFav, on
 // landscape crop so cover doesn't have to zoom/crop them hard to fill a tall
 // panel), and the number/title/body/links/CTA in normal reading flow below
 // it, on the card's own surface background (not overlaid on the photo).
+// Same artwork, icons and texts as the Home hub cards, in a horizontal (wide) layout.
+const ROADBOOK_HUB = {
+  route: { art: () => HUB_ART_ROUTE, icon: () => HUB_ICON_ROUTE, iconW: 30, title: "Pick the Route", text: "hub.route" },
+  postcards: { art: () => HUB_ART_POSTCARDS, icon: () => HUB_ICON_POSTCARDS, iconW: 52, title: "Postcards from the Road", text: "hub.postcards" },
+  atlas: { art: () => HUB_ART_ATLAS, icon: () => HUB_ICON_ATLAS, iconW: 36, title: "The Van Atlas", text: "hub.atlas" },
+};
+
+function RoadbookHubButton({ nav, onNavigate }) {
+  const { t } = useLang();
+  const h = ROADBOOK_HUB[nav];
+  if (!h) return null;
+  return (
+    <button className="hub-card hub-card-wide roadbook-hub-btn" onClick={() => onNavigate(nav)}
+      style={{ backgroundImage: `linear-gradient(90deg, rgba(8,23,31,0.86) 0%, rgba(8,23,31,0.55) 55%, rgba(8,23,31,0) 100%), url("${h.art()}")`, backgroundSize: "100% 100%, cover", backgroundPosition: "0 0, 75% 50%", backgroundRepeat: "no-repeat" }}>
+      <div className="hub-card-icon roadbook-hub-icon"><img src={h.icon()} alt="" style={{ width: h.iconW, height: "auto" }} /></div>
+      <div className="hub-card-wide-body">
+        <div className="hub-card-title">{h.title}</div>
+        <div className="hub-card-text hub-card-text-sm">{t(h.text)}</div>
+      </div>
+      <HubArrow />
+    </button>
+  );
+}
+
 function RoadbookSlide({ section, onNavigate, onPickChoice }) {
   const { t, lang } = useLang();
   const en = lang === "en" ? ROADBOOK_EN[section.n] : null;
@@ -634,7 +658,9 @@ function RoadbookSlide({ section, onNavigate, onPickChoice }) {
         {section.links && (
           <div className="roadbook-section-links">
             {section.links.map((l) => (
-              <button key={l.nav} className="roadbook-link-btn" onClick={() => onNavigate(l.nav)}>{l.label} →</button>
+              ROADBOOK_HUB[l.nav]
+                ? <RoadbookHubButton key={l.nav} nav={l.nav} onNavigate={onNavigate} />
+                : <button key={l.nav} className="roadbook-link-btn" onClick={() => onNavigate(l.nav)}>{l.label} →</button>
             ))}
           </div>
         )}
@@ -655,10 +681,33 @@ function RoadbookSlide({ section, onNavigate, onPickChoice }) {
 // prev/next arrows just call scrollTo on the same track, and onScroll (lightly
 // debounced via rAF) keeps `active` in sync so the dots reflect manual swipes.
 function RoadbookCarousel({ onNavigate, onPickChoice }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const trackRef = useRef(null);
   const [active, setActive] = useState(0);
+  const [growTo, setGrowTo] = useState(null);
   const rafRef = useRef(null);
+
+  // The slide with the three hub buttons is taller than the others: instead of making it scroll inside
+  // its card, the carousel grows to fit it while that slide is showing (all other slides keep the usual height).
+  useEffect(() => {
+    const measure = () => {
+      const track = trackRef.current;
+      const sec = ROADBOOK_SECTIONS[active];
+      const slide = track && track.children[active];
+      if (!track || !slide || !sec || !sec.links) { setGrowTo(null); return; }
+      const content = slide.querySelector(".roadbook-slide-content");
+      const photo = slide.querySelector(".roadbook-slide-photo");
+      if (!content || !photo) { setGrowTo(null); return; }
+      const prev = { flex: content.style.flex, height: content.style.height, overflow: content.style.overflow };
+      content.style.flex = "none"; content.style.height = "auto"; content.style.overflow = "visible";
+      const natural = photo.offsetHeight + content.offsetHeight + 2;
+      content.style.flex = prev.flex; content.style.height = prev.height; content.style.overflow = prev.overflow;
+      setGrowTo(natural);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [active, lang]);
 
   const handleScroll = () => {
     if (rafRef.current) return;
@@ -683,7 +732,8 @@ function RoadbookCarousel({ onNavigate, onPickChoice }) {
 
   return (
     <div className="roadbook-carousel">
-      <div className="roadbook-track" ref={trackRef} onScroll={handleScroll}>
+      <div className="roadbook-track" ref={trackRef} onScroll={handleScroll}
+        style={growTo ? { height: `max(${Math.ceil(growTo)}px, clamp(480px, 80vh, 620px))` } : undefined}>
         {ROADBOOK_SECTIONS.map((s) => (
           <div className="roadbook-track-slide" key={s.n}>
             <RoadbookSlide section={s} onNavigate={onNavigate} onPickChoice={onPickChoice} />
@@ -738,8 +788,10 @@ function RoadbookView({ onNavigate }) {
         <div className="roadbook-choice-overlay fade-in" onClick={() => setChoiceOpen(false)}>
           <div className="roadbook-choice-card" onClick={(e) => e.stopPropagation()}>
             <div className="roadbook-choice-title">{t("rb.choose")}</div>
-            <button className="pill-btn" onClick={() => onNavigate("route")}>🚐 Pick the Route</button>
-            <button className="pill-btn pill-btn-ghost" onClick={() => onNavigate("postcards")}>💌 Postcards from the Road</button>
+            <div className="roadbook-choice-list">
+              <RoadbookHubButton nav="route" onNavigate={onNavigate} />
+              <RoadbookHubButton nav="postcards" onNavigate={onNavigate} />
+            </div>
             <button className="pill-btn pill-btn-ghost" onClick={() => setChoiceOpen(false)}>{t("rb.cancel")}</button>
           </div>
         </div>
@@ -4130,9 +4182,15 @@ const CSS = `
   color: var(--text); font-size: 13px; font-weight: 600; padding: 10px 14px;
   border-radius: 12px; cursor: pointer;
 }
+.roadbook-section-links .roadbook-hub-btn { margin-bottom: 0; min-height: 66px; padding: 9px 14px 9px 10px; gap: 8px; }
+.roadbook-hub-icon { width: 54px; flex: none; justify-content: center; position: relative; }
+.roadbook-hub-btn .hub-card-title { font-size: 13.5px; margin-bottom: 1px; }
+.roadbook-hub-btn .hub-card-text { font-size: 11.5px; line-height: 1.4; }
+.roadbook-hub-btn .hub-card-arrow { width: 20px; height: 20px; }
+.roadbook-section-links:has(.roadbook-hub-btn) { gap: 10px; }
 .roadbook-cta-row { display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
 .roadbook-arrow {
-  position: absolute; top: 15%; transform: translateY(-50%); z-index: 5;
+  position: absolute; top: calc(min(620px, max(480px, 80vh)) * 0.15); transform: translateY(-50%); z-index: 5;
   width: 36px; height: 36px; border-radius: 50%;
   background: rgba(10,13,11,0.55); border: 1px solid rgba(255,255,255,0.25);
   color: #fff; display: flex; align-items: center; justify-content: center;
@@ -4155,6 +4213,9 @@ const CSS = `
   border-radius: 20px; padding: 24px; width: 100%; max-width: 340px;
   display: flex; flex-direction: column; gap: 10px;
 }
+.roadbook-choice-card { max-width: 380px; }
+.roadbook-choice-list { display: flex; flex-direction: column; gap: 10px; }
+.roadbook-choice-list .roadbook-hub-btn { margin-bottom: 0; min-height: 66px; padding: 9px 14px 9px 10px; gap: 8px; }
 .roadbook-choice-title { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 6px; text-align: center; }
 @media (prefers-reduced-motion: reduce) {
   .roadbook-track { scroll-behavior: auto; }
