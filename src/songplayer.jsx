@@ -307,13 +307,14 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
 
 export const SONGPLAYER_CSS = `
 .sp-backdrop {
-  position: fixed; inset: 0; z-index: 2000; display: flex; justify-content: center; align-items: flex-start;
+  position: fixed; inset: 0; z-index: 2000; display: flex; justify-content: center; align-items: flex-start; box-sizing: border-box;
+  padding: max(12px, env(safe-area-inset-top, 0px)) 12px 0;
   background: rgba(3,8,12,0.74); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
 }
 .sp-sheet {
-  position: relative; width: 100%; max-width: 460px; box-sizing: border-box; max-height: 100dvh; overflow-y: auto; overflow-x: hidden;
-  padding: calc(18px + env(safe-area-inset-top, 0px)) 20px 24px;
-  border-radius: 0 0 26px 26px; border: 1px solid rgba(46,208,242,0.45); border-top: none;
+  position: relative; width: 100%; max-width: 460px; box-sizing: border-box; max-height: calc(100dvh - max(12px, env(safe-area-inset-top, 0px)) - 12px); overflow-y: auto; overflow-x: hidden;
+  padding: 18px 20px 24px;
+  border-radius: 26px; border: 1px solid rgba(46,208,242,0.45);
   animation: sp-drop 0.28s ease-out;
   background: radial-gradient(120% 60% at 80% 0%, rgba(46,208,242,0.14) 0%, rgba(46,208,242,0) 60%), linear-gradient(170deg, #0d2a37 0%, #08171f 70%);
   box-shadow: inset 0 0 0 1px rgba(46,208,242,0.12), 0 10px 40px rgba(0,0,0,0.5);

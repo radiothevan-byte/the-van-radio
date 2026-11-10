@@ -28,7 +28,8 @@ with sync_playwright() as p:
               scrolls:sh.scrollHeight>sh.clientHeight+1,hscroll:document.documentElement.scrollWidth-innerWidth,sheetHscroll:sh.scrollWidth-sh.clientWidth}}""")
             sh=m["sheet"]; issues=[]
             if sh[0]<0 or sh[0]+sh[2]>m["vw"]+0.5: issues.append("sheet outside horizontally")
-            if sh[3]>m["vh"]+0.5: issues.append("sheet taller than screen")
+            if sh[3]>m["vh"]-12+0.5: issues.append("sheet taller than screen minus margin")
+            if sh[1]<10 or sh[0]<10 and m["vw"]<=470: issues.append("top/side edge of the frame not visible (needs a margin): %s"%sh)
             for k in("close","play","open","save","share"):
                 e=m[k]
                 if not e: issues.append(k+" missing"); continue
