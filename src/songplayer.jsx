@@ -142,7 +142,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
       if (!document.getElementById("sp-fonts")) {
         const l = document.createElement("link");
         l.id = "sp-fonts"; l.rel = "stylesheet";
-        l.href = "https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Alegreya:ital,wght@1,500;1,700&display=swap";
+        l.href = "https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap";
         document.head.appendChild(l);
       }
     } catch (e) { /* the player works with system fonts */ }
@@ -308,7 +308,7 @@ export const SONGPLAYER_CSS = `
   border-radius: 26px 26px 0 0; border: 1px solid rgba(46,208,242,0.45); border-bottom: none;
   background: radial-gradient(120% 60% at 80% 0%, rgba(46,208,242,0.14) 0%, rgba(46,208,242,0) 60%), linear-gradient(170deg, #0d2a37 0%, #08171f 70%);
   box-shadow: inset 0 0 0 1px rgba(46,208,242,0.12), 0 -10px 40px rgba(0,0,0,0.5);
-  color: #fff; display: flex; flex-direction: column; align-items: stretch; text-align: center;
+  color: #fff; display: flex; flex-direction: column; align-items: stretch; text-align: center; font-family: 'Inter', -apple-system, sans-serif;
 }
 .sp-top { position: relative; display: flex; align-items: center; justify-content: center; min-height: 46px; margin: 0 0 14px; padding: 0 46px; }
 .sp-head { display: inline-flex; align-items: center; gap: clamp(6px, 2.4vw, 12px); max-width: 100%; }
@@ -336,10 +336,10 @@ export const SONGPLAYER_CSS = `
 .sp-spotify { border-radius: 16px; overflow: hidden; }
 .sp-spotify iframe { display: block; border-radius: 16px; }
 .sp-title {
-  margin-top: 20px; font-family: 'Caveat', 'Alegreya', Georgia, 'Times New Roman', serif; font-style: italic; font-size: 32px; font-weight: 700;
-  line-height: 1.15; color: #fff; overflow-wrap: anywhere;
+  margin-top: 20px; font-family: 'Poppins', sans-serif; font-size: clamp(20px, 6.2vw, 25px); font-weight: 700;
+  line-height: 1.25; color: #fff; overflow-wrap: anywhere;
 }
-.sp-artist { margin-top: 4px; font-size: 15.5px; font-weight: 500; color: #fff; overflow-wrap: anywhere; }
+.sp-artist { margin-top: 6px; font-size: 15px; font-weight: 500; color: #fff; overflow-wrap: anywhere; }
 .sp-progress { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
 .sp-time { min-width: 44px; font-size: 14px; color: var(--accent); font-variant-numeric: tabular-nums; }
 .sp-range {
@@ -364,7 +364,7 @@ export const SONGPLAYER_CSS = `
 .sp-save, .sp-share {
   margin: 0; width: auto; max-width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(255,210,63,0.5); background: transparent; color: rgba(255,255,255,0.85); cursor: pointer;
-  font-family: 'Caveat', 'Alegreya', Georgia, serif; font-style: italic; font-size: 17px; font-weight: 600; line-height: 1.15; text-align: left;
+  font-family: 'Poppins', sans-serif; font-size: 13.5px; font-weight: 600; line-height: 1.25; text-align: left;
 }
 .sp-heart, .sp-shareicon { flex: none; color: #ffd23f; }
 .sp-save-on { border-color: rgba(255,210,63,0.85); background: rgba(255,210,63,0.1); color: #fff; }
