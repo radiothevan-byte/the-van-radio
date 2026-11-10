@@ -9,6 +9,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLang } from "./i18n.jsx";
+import { shareLink } from "./share.js";
 
 const YT_ID = /^[A-Za-z0-9_-]{11}$/;
 
@@ -65,6 +66,14 @@ function openUrl(link, parsed) {
   return link;
 }
 
+function ShareIcon() {
+  return (
+    <svg className="sp-shareicon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" /><path d="M16 6l-4-4-4 4" /><path d="M12 2v13" />
+    </svg>
+  );
+}
+
 function HeartIcon({ filled }) {
   return (
     <svg className="sp-heart" width="20" height="20" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -102,7 +111,27 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
   const [cur, setCur] = useState(0);
   const [dur, setDur] = useState(0);
   const [needsTap, setNeedsTap] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const shareTimer = useRef(null);
   const link = openUrl(song.link, parsed);
+  useEffect(() => () => { if (shareTimer.current) clearTimeout(shareTimer.current); }, []);
+
+  // Shares the song's own link (YouTube / Spotify) so the friend can press play right away;
+  // the text mentions The Van. Without a native share sheet the link is copied instead.
+  async function handleShare() {
+    const name = [song.title, song.artist].filter(Boolean).join(" — ");
+    const r = await shareLink({
+      title: name || "Song of the Day",
+      text: `🎵 ${name}\n${t("content.song.shareText")}`,
+      url: link,
+    });
+    if ((r === "shared" || r === "copied") && onEvent) onEvent("share", { type: "song", method: r });
+    if (r === "copied") {
+      setShareCopied(true);
+      if (shareTimer.current) clearTimeout(shareTimer.current);
+      shareTimer.current = setTimeout(() => setShareCopied(false), 2200);
+    }
+  }
 
   // lock page scroll, close on Escape, restore focus
   useEffect(() => {
@@ -251,9 +280,14 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
         {isYt && state === "error" && <p className="sp-hint" role="alert">{t("content.song.error")}</p>}
         {parsed.kind === "spotify" && <p className="sp-hint">{t("content.song.spotifyNote")}</p>}
 
-        <button type="button" className={`sp-save ${saved ? "sp-save-on" : ""}`} onClick={onSave} aria-pressed={saved}>
-          <HeartIcon filled={saved} /> <span>{saved ? t("content.song.saved") : t("content.song.save")}</span>
-        </button>
+        <div className="sp-actions">
+          <button type="button" className={`sp-save ${saved ? "sp-save-on" : ""}`} onClick={onSave} aria-pressed={saved}>
+            <HeartIcon filled={saved} /> <span>{saved ? t("content.song.saved") : t("content.song.save")}</span>
+          </button>
+          <button type="button" className="sp-share" onClick={handleShare}>
+            <ShareIcon /> <span>{shareCopied ? t("share.copied") : t("content.song.share")}</span>
+          </button>
+        </div>
         <a className="sp-open" href={link} target="_blank" rel="noopener noreferrer">
           {parsed.kind === "spotify" ? t("content.song.openSpotify") : t("content.song.openYoutube")} <span aria-hidden="true">↗</span>
         </a>
@@ -326,12 +360,14 @@ export const SONGPLAYER_CSS = `
 .sp-skip { width: 48px; height: 48px; border: none; background: transparent; color: rgba(255,255,255,0.78); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .sp-play:disabled, .sp-skip:disabled { opacity: 0.45; cursor: default; }
 .sp-hint { margin: 12px 0 0; font-size: 12.5px; line-height: 1.45; color: rgba(255,255,255,0.72); }
-.sp-save {
-  margin: 18px auto 0; width: auto; max-width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+.sp-actions { margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 100%; }
+.sp-save, .sp-share {
+  margin: 0; width: auto; max-width: 100%; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(255,210,63,0.5); background: transparent; color: rgba(255,255,255,0.85); cursor: pointer;
   font-family: 'Caveat', 'Alegreya', Georgia, serif; font-style: italic; font-size: 17px; font-weight: 600; line-height: 1.15; text-align: left;
 }
-.sp-heart { flex: none; color: #ffd23f; }
+.sp-heart, .sp-shareicon { flex: none; color: #ffd23f; }
 .sp-save-on { border-color: rgba(255,210,63,0.85); background: rgba(255,210,63,0.1); color: #fff; }
+.sp-share { border-color: rgba(255,255,255,0.28); }
 .sp-open { margin-top: 14px; font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.6); text-decoration: none; }
 `;
