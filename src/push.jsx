@@ -189,8 +189,6 @@ export const PUSH_CSS = `
 .top-action-bar .push-wrap { position: absolute; top: calc(100% + 8px); right: 74px; }
 .top-action-bar .push-bell { padding: 4px 9px; }
 .top-action-bar .push-pop { top: calc(100% + 8px); right: -74px; }
-.push-pop { top: calc(100% + 8px); right: -74px; }
-}
 .push-pop {
   position: absolute; top: calc(100% + 8px); right: 0; width: min(280px, calc(100vw - 40px)); box-sizing: border-box;
   padding: 14px 16px 16px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface);
