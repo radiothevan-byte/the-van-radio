@@ -185,11 +185,11 @@ export const PUSH_CSS = `
 .push-wrap { position: relative; display: flex; }
 .push-bell { padding: 8px 10px; }
 .push-bell-on { color: #7fd4ee; border-color: rgba(57,172,208,0.9); }
-/* very narrow phones: the top row is full, so the bell sits on the small row below, left of EL|EN */
-@media (max-width: 360px) {
-  .top-action-bar .push-wrap { position: absolute; top: calc(100% + 8px); right: 74px; }
-  .top-action-bar .push-bell { padding: 4px 9px; }
-  .top-action-bar .push-pop { top: calc(100% + 8px); right: -74px; }
+/* the bell sits on the small row under Co-pilot / Live, immediately left of EL|EN (same row, same height) */
+.top-action-bar .push-wrap { position: absolute; top: calc(100% + 8px); right: 74px; }
+.top-action-bar .push-bell { padding: 4px 9px; }
+.top-action-bar .push-pop { top: calc(100% + 8px); right: -74px; }
+.push-pop { top: calc(100% + 8px); right: -74px; }
 }
 .push-pop {
   position: absolute; top: calc(100% + 8px); right: 0; width: min(280px, calc(100vw - 40px)); box-sizing: border-box;
