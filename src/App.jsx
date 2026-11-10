@@ -16,7 +16,7 @@ import "leaflet/dist/leaflet.css";
 import { LangProvider, LangToggle, useLang, DICT, placeLabel } from "./i18n.jsx";
 import { ROADBOOK_EN } from "./i18n-screens.js";
 import { shareLink, journeyShareUrl, postcardShareUrl } from "./share.js";
-import { ContentProvider, SongOfTheDayCard, VanPollCard, CONTENT_CSS } from "./content.jsx";
+import { ContentProvider, SongOfTheDayCard, VanPollCard, SongPlayLink, CONTENT_CSS } from "./content.jsx";
 import { NotificationsBell, PUSH_CSS } from "./push.jsx";
 import { trackEvent, trackReturningVisit } from "./analytics.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
@@ -350,9 +350,9 @@ const ROADBOOK_SECTIONS = [
     ],
     bg: ROADBOOK_BG_06,
     links: [
-      { label: "🚐 Pick the Route", nav: "route" },
-      { label: "💌 Postcards from the Road", nav: "postcards" },
-      { label: "🗺️ Van Atlas", nav: "atlas" },
+      { label: "Pick the Route", nav: "route" },
+      { label: "Postcards from the Road", nav: "postcards" },
+      { label: "The Van Atlas", nav: "atlas" },
     ],
   },
   {
@@ -471,6 +471,23 @@ function HomeView({ journeys, currentId, isPlaying, favorites, onPlay, onFav, on
 function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFav, onOpen, goHome, myVanSongs, myVanPostcards, onRemoveSong, onRemovePostcard }) {
   const { t } = useLang();
   const [category, setCategory] = useState("journeys"); // journeys | songs | postcards
+  // Postcards saved before song details were stored with them: look their song up once in the approved list.
+  const [cardSongs, setCardSongs] = useState({});
+  const needsSongLookup = category === "postcards" && myVanPostcards.some((p) => typeof p.musicUrl !== "string" && !cardSongs[p.id]);
+  useEffect(() => {
+    if (!needsSongLookup) return undefined;
+    let alive = true;
+    fetchApprovedPostcardsForAtlas().then((list) => {
+      if (!alive) return;
+      const m = {};
+      list.forEach((e) => { m[e.id] = { songTitle: e.songTitle, artist: e.artist, musicUrl: e.musicUrl }; });
+      // mark every looked-up id (also "no song") so the lookup runs once
+      const marks = {};
+      myVanPostcards.forEach((p) => { if (typeof p.musicUrl !== "string") marks[p.id] = m[p.id] || { songTitle: "", artist: "", musicUrl: "" }; });
+      setCardSongs((prev) => ({ ...prev, ...marks }));
+    }).catch(() => { if (alive) setCardSongs((prev) => { const o = { ...prev }; myVanPostcards.forEach((p) => { if (typeof p.musicUrl !== "string" && !o[p.id]) o[p.id] = { songTitle: "", artist: "", musicUrl: "" }; }); return o; }); });
+    return () => { alive = false; };
+  }, [needsSongLookup]); // eslint-disable-line react-hooks/exhaustive-deps
   const favJourneys = journeys.filter((j) => favorites.includes(j.id));
   return (
     <div className="view fade-in">
@@ -526,7 +543,9 @@ function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFa
                   {s.placeName && <div className="myvan-song-sub">📍 {s.placeName}</div>}
                 </div>
                 <div className="myvan-song-actions">
-                  {s.musicUrl && <a className="myvan-song-link" href={s.musicUrl} target="_blank" rel="noreferrer">▶</a>}
+                  {s.musicUrl && (
+                    <SongPlayLink className="myvan-song-link" song={{ id: s.id, title: s.title, artist: s.artist, link: s.musicUrl }} heading="My Van" ariaLabel={t("content.song.play")}>▶</SongPlayLink>
+                  )}
                   <button className="myvan-song-remove" onClick={() => onRemoveSong(s.id)}><X size={16} /></button>
                 </div>
               </div>
@@ -544,14 +563,26 @@ function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFa
           </div>
         ) : (
           <div className="myvan-postcard-grid">
-            {myVanPostcards.map((p) => (
+            {myVanPostcards.map((p0) => {
+              const p = { ...p0, ...(typeof p0.musicUrl === "string" ? {} : (cardSongs[p0.id] || {})) };
+              const hasSong = !!(p.songTitle || p.artist);
+              return (
               <div className="myvan-postcard-card" key={p.id}>
                 {p.photoUrl && <img src={p.photoUrl} alt="" className="myvan-postcard-photo" />}
                 <div className="myvan-postcard-place">{p.placeName}</div>
                 {p.story && <div className="myvan-postcard-story">{p.story}</div>}
+                {(hasSong || p.musicUrl) && (
+                  <div className="myvan-postcard-song">
+                    <span className="myvan-postcard-song-title">🎵 {hasSong ? `${p.songTitle}${p.artist ? ` — ${p.artist}` : ""}` : ""}</span>
+                    {p.musicUrl && (
+                      <SongPlayLink className="myvan-song-link" song={{ id: `pc-${p.id}`, title: p.songTitle || p.placeName || "", artist: p.artist, link: p.musicUrl }} heading="My Van" ariaLabel={t("content.song.play")}>▶</SongPlayLink>
+                    )}
+                  </div>
+                )}
                 <button className="myvan-song-remove myvan-postcard-remove" onClick={() => onRemovePostcard(p.id)}><X size={16} /></button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )
       )}
@@ -616,6 +647,30 @@ function JourneyDetail({ journey, isCurrent, isPlaying, isFav, onPlay, onFav, on
 // landscape crop so cover doesn't have to zoom/crop them hard to fill a tall
 // panel), and the number/title/body/links/CTA in normal reading flow below
 // it, on the card's own surface background (not overlaid on the photo).
+// Same artwork, icons and texts as the Home hub cards, in a horizontal (wide) layout.
+const ROADBOOK_HUB = {
+  route: { art: () => HUB_ART_ROUTE, icon: () => HUB_ICON_ROUTE, iconW: 30, title: "Pick the Route", text: "hub.route" },
+  postcards: { art: () => HUB_ART_POSTCARDS, icon: () => HUB_ICON_POSTCARDS, iconW: 52, title: "Postcards from the Road", text: "hub.postcards" },
+  atlas: { art: () => HUB_ART_ATLAS, icon: () => HUB_ICON_ATLAS, iconW: 36, title: "The Van Atlas", text: "hub.atlas" },
+};
+
+function RoadbookHubButton({ nav, onNavigate }) {
+  const { t } = useLang();
+  const h = ROADBOOK_HUB[nav];
+  if (!h) return null;
+  return (
+    <button className="hub-card hub-card-wide roadbook-hub-btn" onClick={() => onNavigate(nav)}
+      style={{ backgroundImage: `linear-gradient(90deg, rgba(8,23,31,0.86) 0%, rgba(8,23,31,0.55) 55%, rgba(8,23,31,0) 100%), url("${h.art()}")`, backgroundSize: "100% 100%, cover", backgroundPosition: "0 0, 75% 50%", backgroundRepeat: "no-repeat" }}>
+      <div className="hub-card-icon roadbook-hub-icon"><img src={h.icon()} alt="" style={{ width: h.iconW, height: "auto" }} /></div>
+      <div className="hub-card-wide-body">
+        <div className="hub-card-title">{h.title}</div>
+        <div className="hub-card-text hub-card-text-sm">{t(h.text)}</div>
+      </div>
+      <HubArrow />
+    </button>
+  );
+}
+
 function RoadbookSlide({ section, onNavigate, onPickChoice }) {
   const { t, lang } = useLang();
   const en = lang === "en" ? ROADBOOK_EN[section.n] : null;
@@ -635,7 +690,9 @@ function RoadbookSlide({ section, onNavigate, onPickChoice }) {
         {section.links && (
           <div className="roadbook-section-links">
             {section.links.map((l) => (
-              <button key={l.nav} className="roadbook-link-btn" onClick={() => onNavigate(l.nav)}>{l.label} →</button>
+              ROADBOOK_HUB[l.nav]
+                ? <RoadbookHubButton key={l.nav} nav={l.nav} onNavigate={onNavigate} />
+                : <button key={l.nav} className="roadbook-link-btn" onClick={() => onNavigate(l.nav)}>{l.label} →</button>
             ))}
           </div>
         )}
@@ -656,10 +713,33 @@ function RoadbookSlide({ section, onNavigate, onPickChoice }) {
 // prev/next arrows just call scrollTo on the same track, and onScroll (lightly
 // debounced via rAF) keeps `active` in sync so the dots reflect manual swipes.
 function RoadbookCarousel({ onNavigate, onPickChoice }) {
-  const { t } = useLang();
+  const { t, lang } = useLang();
   const trackRef = useRef(null);
   const [active, setActive] = useState(0);
+  const [growTo, setGrowTo] = useState(null);
   const rafRef = useRef(null);
+
+  // The slide with the three hub buttons is taller than the others: instead of making it scroll inside
+  // its card, the carousel grows to fit it while that slide is showing (all other slides keep the usual height).
+  useEffect(() => {
+    const measure = () => {
+      const track = trackRef.current;
+      const sec = ROADBOOK_SECTIONS[active];
+      const slide = track && track.children[active];
+      if (!track || !slide || !sec || !sec.links) { setGrowTo(null); return; }
+      const content = slide.querySelector(".roadbook-slide-content");
+      const photo = slide.querySelector(".roadbook-slide-photo");
+      if (!content || !photo) { setGrowTo(null); return; }
+      const prev = { flex: content.style.flex, height: content.style.height, overflow: content.style.overflow };
+      content.style.flex = "none"; content.style.height = "auto"; content.style.overflow = "visible";
+      const natural = photo.offsetHeight + content.offsetHeight + 2;
+      content.style.flex = prev.flex; content.style.height = prev.height; content.style.overflow = prev.overflow;
+      setGrowTo(natural);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [active, lang]);
 
   const handleScroll = () => {
     if (rafRef.current) return;
@@ -684,7 +764,8 @@ function RoadbookCarousel({ onNavigate, onPickChoice }) {
 
   return (
     <div className="roadbook-carousel">
-      <div className="roadbook-track" ref={trackRef} onScroll={handleScroll}>
+      <div className="roadbook-track" ref={trackRef} onScroll={handleScroll}
+        style={growTo ? { height: `max(${Math.ceil(growTo)}px, clamp(480px, 80vh, 620px))` } : undefined}>
         {ROADBOOK_SECTIONS.map((s) => (
           <div className="roadbook-track-slide" key={s.n}>
             <RoadbookSlide section={s} onNavigate={onNavigate} onPickChoice={onPickChoice} />
@@ -739,8 +820,10 @@ function RoadbookView({ onNavigate }) {
         <div className="roadbook-choice-overlay fade-in" onClick={() => setChoiceOpen(false)}>
           <div className="roadbook-choice-card" onClick={(e) => e.stopPropagation()}>
             <div className="roadbook-choice-title">{t("rb.choose")}</div>
-            <button className="pill-btn" onClick={() => onNavigate("route")}>🚐 Pick the Route</button>
-            <button className="pill-btn pill-btn-ghost" onClick={() => onNavigate("postcards")}>💌 Postcards from the Road</button>
+            <div className="roadbook-choice-list">
+              <RoadbookHubButton nav="route" onNavigate={onNavigate} />
+              <RoadbookHubButton nav="postcards" onNavigate={onNavigate} />
+            </div>
             <button className="pill-btn pill-btn-ghost" onClick={() => setChoiceOpen(false)}>{t("rb.cancel")}</button>
           </div>
         </div>
@@ -2332,7 +2415,12 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
         {hasSong && <div className="atlas-entry-song">🎵 {entry.songTitle}{entry.artist ? ` — ${entry.artist}` : ""}</div>}
         {entry.story && <div className="atlas-entry-story">{entry.story}</div>}
         <div className="atlas-entry-actions">
-          {entry.musicUrl && <a className="atlas-entry-link" href={entry.musicUrl} target="_blank" rel="noreferrer">{t("atlas.listen")}</a>}
+          {entry.musicUrl && (
+            <SongPlayLink className="atlas-entry-link" song={{ id: songId, title: entry.songTitle || entry.placeName || "", artist: entry.artist, link: entry.musicUrl }}
+              heading="Van Atlas" saved={saved} onSave={hasSong ? () => onSaveSong({ id: songId, title: entry.songTitle, artist: entry.artist, musicUrl: entry.musicUrl, placeName: entry.placeName }) : undefined}>
+              {t("atlas.listen")}
+            </SongPlayLink>
+          )}
           {hasSong && (
             <button
               className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
@@ -2361,13 +2449,17 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
       {hasSong && <div className="atlas-entry-song">🎵 {entry.songTitle}{entry.artist ? ` — ${entry.artist}` : ""}</div>}
       {entry.displayName && <div className="atlas-entry-byline">— {entry.displayName}</div>}
       <div className="atlas-entry-actions">
-        {entry.musicUrl && <a className="atlas-entry-link" href={entry.musicUrl} target="_blank" rel="noreferrer">{t("atlas.listen")}</a>}
+        {entry.musicUrl && (
+          <SongPlayLink className="atlas-entry-link" song={{ id: `pc-${entry.id}`, title: entry.songTitle || entry.placeName || "", artist: entry.artist, link: entry.musicUrl }} heading="Van Atlas">
+            {t("atlas.listen")}
+          </SongPlayLink>
+        )}
         {canShare && (
           <button className="atlas-entry-save" onClick={handleShare}>{shareCopied ? t("share.copied") : t("share.button")}</button>
         )}
         <button
           className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
-          onClick={() => onSavePostcard({ id: entry.id, placeName: entry.placeName, story: entry.story, photoUrl: entry.photoUrl })}
+          onClick={() => onSavePostcard({ id: entry.id, placeName: entry.placeName, story: entry.story, photoUrl: entry.photoUrl, songTitle: entry.songTitle || "", artist: entry.artist || "", musicUrl: entry.musicUrl || "" })}
         >
           {saved ? t("atlas.inMyVan") : "+ My Van"}
         </button>
@@ -2465,7 +2557,7 @@ function AtlasClusterLayer({ groups, activeGroups, onSelect }) {
   ));
 }
 
-function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
+function VanAtlasView({ sharedPostcardId, sharedNonce, myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
   const { t } = useLang();
   const [status, setStatus] = useState("loading"); // loading | ready | error
   const [groups, setGroups] = useState([]);
@@ -2478,7 +2570,9 @@ function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong
   // listed these. Now it stays empty until the person explicitly asks to
   // see them, same as the pin detail panel only shows after a click.
   const [showTextOnly, setShowTextOnly] = useState(false);
-  const [sharedEntry, setSharedEntry] = useState(null); // postcard opened from a shared link
+  const [sharedEntry, setSharedEntry] = useState(null); // postcard opened from a shared link or a promotion
+  const [allEntries, setAllEntries] = useState(null);
+  const sharedRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -2486,8 +2580,7 @@ function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong
     fetchAtlasEntries()
       .then((entries) => {
         if (cancelled) return;
-        // fetchAtlasEntries only ever contains approved postcards, so an unknown id just shows nothing.
-        if (sharedPostcardId) setSharedEntry(entries.find((e) => e.kind === "postcard" && String(e.id) === String(sharedPostcardId)) || null);
+        setAllEntries(entries);
         const { groups: g, textOnly: t } = buildAtlasGroups(entries);
         setGroups(g);
         setTextOnly(t);
@@ -2502,6 +2595,17 @@ function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong
     return () => { cancelled = true; };
   }, []);
 
+  // A shared link or a promotion can ask for a postcard at any time (also while Atlas is already open).
+  // fetchAtlasEntries only ever contains approved postcards, so an unknown id just shows nothing.
+  useEffect(() => {
+    if (!allEntries || !sharedPostcardId) return;
+    setSharedEntry(allEntries.find((e) => e.kind === "postcard" && String(e.id) === String(sharedPostcardId)) || null);
+  }, [allEntries, sharedPostcardId, sharedNonce]);
+  useEffect(() => {
+    if (!sharedEntry || !sharedNonce) return;   // only for a tap on a promotion, not for a freshly opened shared link
+    try { if (sharedRef.current) sharedRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { /* ignore */ }
+  }, [sharedEntry, sharedNonce]);
+
   const isEmpty = status === "ready" && groups.length === 0 && textOnly.length === 0;
 
   return (
@@ -2514,7 +2618,7 @@ function VanAtlasView({ sharedPostcardId, myVanSongs, myVanPostcards, onSaveSong
       <PromotionSlot placement="ATLAS_FEATURED" variant="strip" />
 
       {sharedEntry && (
-        <div className="atlas-shared">
+        <div className="atlas-shared" ref={sharedRef}>
           <div className="route-step-heading route-step-heading-sm">{t("share.sharedPostcard")}</div>
           {sharedEntry.placeName && <div className="atlas-entry-place-text">📍 {sharedEntry.placeName}</div>}
           <AtlasEntryCard entry={sharedEntry} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={onSaveSong} onSavePostcard={onSavePostcard} />
@@ -2858,6 +2962,8 @@ function TheVanAppInner() {
     });
   }
   const [currentId, setCurrentId] = useState(null);
+  // Postcard requested by a shared link (initial) or by tapping a promotion (nonce changes on every tap).
+  const [sharedPostcard, setSharedPostcard] = useState(() => (deepLinkRef.current && deepLinkRef.current.type === "postcard" ? { id: deepLinkRef.current.id, n: 0 } : { id: null, n: 0 }));
   const [openId, setOpenId] = useState(() => (deepLinkRef.current && deepLinkRef.current.type === "journey" ? deepLinkRef.current.id : null));
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -3022,13 +3128,14 @@ function TheVanAppInner() {
   const promoActions = useMemo(() => ({
     navigate: (key) => setTabRef.current(key),
     openJourney: (id) => setOpenId(id),
+    openPostcard: (id) => { setSharedPostcard((p) => ({ id, n: p.n + 1 })); setTabRef.current("atlas"); },
     resolveTab: (path) => PATH_TABS[normalizePath(path)] || null,
     getJourney: (id) => journeysRef.current.find((j) => j.id === id),
   }), []);
 
   return (
     <PromotionsProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} actions={promoActions}>
-    <ContentProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} onEvent={trackEvent}>
+    <ContentProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} onEvent={trackEvent} myVanSongs={myVanSongs} onSaveSong={handleSaveSong} onSongPlay={() => setIsPlaying(false)}>
     <div className="app-root">
       <style>{CSS}{PROMO_CSS}{CONTENT_CSS}{PUSH_CSS}</style>
       <audio
@@ -3063,7 +3170,7 @@ function TheVanAppInner() {
         {tab === "route" && <PickRouteView />}
         {tab === "postcards" && <PostcardsView />}
         {tab === "atlas" && (
-          <VanAtlasView sharedPostcardId={deepLinkRef.current && deepLinkRef.current.type === "postcard" ? deepLinkRef.current.id : null} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={handleSaveSong} onSavePostcard={handleSavePostcard} />
+          <VanAtlasView sharedPostcardId={sharedPostcard.id} sharedNonce={sharedPostcard.n} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={handleSaveSong} onSavePostcard={handleSavePostcard} />
         )}
         {tab === "roadbook" && <RoadbookView onNavigate={setTab} />}
         {tab === "about" && <AboutView />}
@@ -4017,6 +4124,8 @@ const CSS = `
 .myvan-postcard-photo { width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; }
 .myvan-postcard-place { font-weight: 700; font-size: 13.5px; margin-bottom: 4px; }
 .myvan-postcard-story { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; }
+.myvan-postcard-song { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.myvan-postcard-song-title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--accent); overflow-wrap: anywhere; }
 .myvan-postcard-remove { position: absolute; top: 12px; right: 12px; }
 
 .route-map-badge-standalone {
@@ -4117,9 +4226,15 @@ const CSS = `
   color: var(--text); font-size: 13px; font-weight: 600; padding: 10px 14px;
   border-radius: 12px; cursor: pointer;
 }
+.roadbook-section-links .roadbook-hub-btn { margin-bottom: 0; min-height: 66px; padding: 9px 14px 9px 10px; gap: 8px; }
+.roadbook-hub-icon { width: 54px; flex: none; justify-content: center; position: relative; }
+.roadbook-hub-btn .hub-card-title { font-size: 13.5px; margin-bottom: 1px; }
+.roadbook-hub-btn .hub-card-text { font-size: 11.5px; line-height: 1.4; }
+.roadbook-hub-btn .hub-card-arrow { width: 20px; height: 20px; }
+.roadbook-section-links:has(.roadbook-hub-btn) { gap: 10px; }
 .roadbook-cta-row { display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
 .roadbook-arrow {
-  position: absolute; top: 15%; transform: translateY(-50%); z-index: 5;
+  position: absolute; top: calc(min(620px, max(480px, 80vh)) * 0.15); transform: translateY(-50%); z-index: 5;
   width: 36px; height: 36px; border-radius: 50%;
   background: rgba(10,13,11,0.55); border: 1px solid rgba(255,255,255,0.25);
   color: #fff; display: flex; align-items: center; justify-content: center;
@@ -4142,6 +4257,9 @@ const CSS = `
   border-radius: 20px; padding: 24px; width: 100%; max-width: 340px;
   display: flex; flex-direction: column; gap: 10px;
 }
+.roadbook-choice-card { max-width: 380px; }
+.roadbook-choice-list { display: flex; flex-direction: column; gap: 10px; }
+.roadbook-choice-list .roadbook-hub-btn { margin-bottom: 0; min-height: 66px; padding: 9px 14px 9px 10px; gap: 8px; }
 .roadbook-choice-title { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 6px; text-align: center; }
 @media (prefers-reduced-motion: reduce) {
   .roadbook-track { scroll-behavior: auto; }
