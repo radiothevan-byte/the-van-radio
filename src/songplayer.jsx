@@ -241,6 +241,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
           <button type="button" className="sp-close" onClick={onClose} ref={closeRef} aria-label={t("content.song.close")}>×</button>
         </div>
 
+        <div className="sp-body">
         {isYt && state !== "error" && (
           <div className={`sp-cover ${needsTap ? "sp-cover-tap" : ""}`}>
             <div ref={mountRef} className="sp-yt" />
@@ -255,6 +256,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
           </div>
         )}
 
+        <div className="sp-info">
         <div className="sp-title">{song.title}</div>
         {song.artist && <div className="sp-artist">{song.artist}</div>}
 
@@ -295,6 +297,8 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
         <a className="sp-open" href={link} target="_blank" rel="noopener noreferrer">
           {parsed.kind === "spotify" ? t("content.song.openSpotify") : t("content.song.openYoutube")} <span aria-hidden="true">↗</span>
         </a>
+        </div>
+        </div>
       </div>
     </div>,
     document.body
@@ -314,6 +318,18 @@ export const SONGPLAYER_CSS = `
   background: radial-gradient(120% 60% at 80% 0%, rgba(46,208,242,0.14) 0%, rgba(46,208,242,0) 60%), linear-gradient(170deg, #0d2a37 0%, #08171f 70%);
   box-shadow: inset 0 0 0 1px rgba(46,208,242,0.12), 0 10px 40px rgba(0,0,0,0.5);
   color: #fff; display: flex; flex-direction: column; align-items: stretch; text-align: center; font-family: 'Inter', -apple-system, sans-serif;
+}
+/* nothing inside the player may be squashed on short screens - the sheet scrolls instead, and the video always keeps its 16:9 size */
+.sp-sheet > *, .sp-body > *, .sp-info > * { flex-shrink: 0; }
+.sp-body { display: flex; flex-direction: column; align-items: stretch; }
+.sp-info { display: flex; flex-direction: column; align-items: stretch; min-width: 0; }
+/* phones held sideways: video on the left, song details on the right */
+@media (orientation: landscape) and (max-height: 540px) {
+  .sp-sheet { max-width: min(860px, 100%); padding-left: calc(20px + env(safe-area-inset-left, 0px)); padding-right: calc(20px + env(safe-area-inset-right, 0px)); }
+  .sp-top { margin-bottom: 8px; min-height: 40px; }
+  .sp-body { flex-direction: row; align-items: flex-start; gap: 22px; }
+  .sp-body > .sp-cover, .sp-body > .sp-spotify { flex: 0 0 46%; width: 46%; }
+  .sp-body > .sp-info { flex: 1 1 0; }
 }
 @keyframes sp-drop { from { transform: translateY(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .sp-sheet { animation: none; } }
