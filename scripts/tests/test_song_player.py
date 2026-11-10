@@ -84,7 +84,7 @@ with sync_playwright() as p:
     # reopen then Esc and backdrop
     pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); check("Αποθηκεύτηκε" in pg.locator(".sp-save").inner_text(),"reopened: already-saved state remembered")
     pg.keyboard.press("Escape"); pg.wait_for_timeout(200); check(pg.locator(".sp-sheet").count()==0,"Escape closes")
-    pg.locator(".content-song").click(); pg.wait_for_selector(".sp-sheet"); pg.mouse.click(190,20); pg.wait_for_timeout(200); check(pg.locator(".sp-sheet").count()==0,"tap on the dark backdrop closes")
+    pg.locator(".content-song").click(); pg.wait_for_selector(".sp-sheet"); pg.mouse.click(190,800); pg.wait_for_timeout(200); check(pg.locator(".sp-sheet").count()==0,"tap on the dark backdrop closes")
     # unsave
     pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.locator(".sp-save").click(); pg.wait_for_timeout(150)
     check(pg.evaluate("JSON.parse(localStorage.getItem('tvr_my_van_songs')||'[]')").__len__()==0 and hf()=="none","second tap un-saves and the heart empties again")
