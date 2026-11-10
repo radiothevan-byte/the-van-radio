@@ -470,6 +470,23 @@ function HomeView({ journeys, currentId, isPlaying, favorites, onPlay, onFav, on
 function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFav, onOpen, goHome, myVanSongs, myVanPostcards, onRemoveSong, onRemovePostcard }) {
   const { t } = useLang();
   const [category, setCategory] = useState("journeys"); // journeys | songs | postcards
+  // Postcards saved before song details were stored with them: look their song up once in the approved list.
+  const [cardSongs, setCardSongs] = useState({});
+  const needsSongLookup = category === "postcards" && myVanPostcards.some((p) => typeof p.musicUrl !== "string" && !cardSongs[p.id]);
+  useEffect(() => {
+    if (!needsSongLookup) return undefined;
+    let alive = true;
+    fetchApprovedPostcardsForAtlas().then((list) => {
+      if (!alive) return;
+      const m = {};
+      list.forEach((e) => { m[e.id] = { songTitle: e.songTitle, artist: e.artist, musicUrl: e.musicUrl }; });
+      // mark every looked-up id (also "no song") so the lookup runs once
+      const marks = {};
+      myVanPostcards.forEach((p) => { if (typeof p.musicUrl !== "string") marks[p.id] = m[p.id] || { songTitle: "", artist: "", musicUrl: "" }; });
+      setCardSongs((prev) => ({ ...prev, ...marks }));
+    }).catch(() => { if (alive) setCardSongs((prev) => { const o = { ...prev }; myVanPostcards.forEach((p) => { if (typeof p.musicUrl !== "string" && !o[p.id]) o[p.id] = { songTitle: "", artist: "", musicUrl: "" }; }); return o; }); });
+    return () => { alive = false; };
+  }, [needsSongLookup]); // eslint-disable-line react-hooks/exhaustive-deps
   const favJourneys = journeys.filter((j) => favorites.includes(j.id));
   return (
     <div className="view fade-in">
@@ -545,14 +562,26 @@ function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFa
           </div>
         ) : (
           <div className="myvan-postcard-grid">
-            {myVanPostcards.map((p) => (
+            {myVanPostcards.map((p0) => {
+              const p = { ...p0, ...(typeof p0.musicUrl === "string" ? {} : (cardSongs[p0.id] || {})) };
+              const hasSong = !!(p.songTitle || p.artist);
+              return (
               <div className="myvan-postcard-card" key={p.id}>
                 {p.photoUrl && <img src={p.photoUrl} alt="" className="myvan-postcard-photo" />}
                 <div className="myvan-postcard-place">{p.placeName}</div>
                 {p.story && <div className="myvan-postcard-story">{p.story}</div>}
+                {(hasSong || p.musicUrl) && (
+                  <div className="myvan-postcard-song">
+                    <span className="myvan-postcard-song-title">🎵 {hasSong ? `${p.songTitle}${p.artist ? ` — ${p.artist}` : ""}` : ""}</span>
+                    {p.musicUrl && (
+                      <SongPlayLink className="myvan-song-link" song={{ id: `pc-${p.id}`, title: p.songTitle || p.placeName || "", artist: p.artist, link: p.musicUrl }} heading="My Van" ariaLabel={t("content.song.play")}>▶</SongPlayLink>
+                    )}
+                  </div>
+                )}
                 <button className="myvan-song-remove myvan-postcard-remove" onClick={() => onRemovePostcard(p.id)}><X size={16} /></button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )
       )}
@@ -2428,7 +2457,7 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
         )}
         <button
           className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
-          onClick={() => onSavePostcard({ id: entry.id, placeName: entry.placeName, story: entry.story, photoUrl: entry.photoUrl })}
+          onClick={() => onSavePostcard({ id: entry.id, placeName: entry.placeName, story: entry.story, photoUrl: entry.photoUrl, songTitle: entry.songTitle || "", artist: entry.artist || "", musicUrl: entry.musicUrl || "" })}
         >
           {saved ? t("atlas.inMyVan") : "+ My Van"}
         </button>
@@ -4093,6 +4122,8 @@ const CSS = `
 .myvan-postcard-photo { width: 100%; max-height: 180px; object-fit: cover; border-radius: 12px; margin-bottom: 8px; }
 .myvan-postcard-place { font-weight: 700; font-size: 13.5px; margin-bottom: 4px; }
 .myvan-postcard-story { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; }
+.myvan-postcard-song { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.myvan-postcard-song-title { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: var(--accent); overflow-wrap: anywhere; }
 .myvan-postcard-remove { position: absolute; top: 12px; right: 12px; }
 
 .route-map-badge-standalone {
