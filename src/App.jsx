@@ -2347,9 +2347,12 @@ function PostcardsView() {
   if (status === "success") {
     return (
       <div className="view fade-in postcard-success">
-        <div className="postcard-success-icon"><CheckCircle2 size={44} strokeWidth={1.6} /></div>
-        <h1 className="page-title center">{t("pc.sent.title")}</h1>
-        <p className="route-intro-text route-intro-text-center">{t("pc.sent.text")}</p>
+        <div className="pc-success-card">
+          <div className="pc-stamp" aria-hidden="true">💌</div>
+          <div className="postcard-success-icon"><CheckCircle2 size={44} strokeWidth={1.6} /></div>
+          <h1 className="page-title center">{t("pc.sent.title")}</h1>
+          <p className="route-intro-text route-intro-text-center">{t("pc.sent.text")}</p>
+        </div>
         <div className="route-nav route-nav-center">
           <button className="pill-btn" onClick={resetForNew}>{t("pc.sent.another")}</button>
         </div>
@@ -2358,49 +2361,61 @@ function PostcardsView() {
   }
 
   return (
-    <div className="view fade-in">
+    <div className="view fade-in pc-form">
+      <div className="pc-hero">
+        <img src={ROADBOOK_BG_05} alt="" className="pc-hero-img" />
+      </div>
       <div className="eyebrow">POSTCARDS FROM THE ROAD 💌</div>
       <h1 className="page-title">{t("pc.title")}</h1>
       <p className="route-intro-text">
         {t("pc.intro")}
       </p>
 
-      <label className="route-field-label">{t("route.nameLabel")}</label>
-      <input className="route-input" placeholder={t("route.namePh")} value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={60} />
+      <section className="pc-section">
+        <label className="route-field-label">{t("route.nameLabel")}</label>
+        <input className="route-input" placeholder={t("route.namePh")} value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={60} />
+      </section>
 
-      <label className="route-field-label">{t("pc.placeLabel")}</label>
-      <p className="route-intro-text">{t("pc.placeHelp")}</p>
-      <RouteMapWithSearch selected={pickedPoint} onSelect={setPickedPoint} onFreePick={handleFreePick} onSearchPick={setPickedPoint} />
-      {pickedPoint && (
-        <div className="route-confirm-line">📍 {pickedPoint.resolving ? t("route.locating") : pn(pickedPoint.name)}</div>
-      )}
+      <section className="pc-section">
+        <label className="route-field-label">{t("pc.placeLabel")}</label>
+        <p className="route-intro-text pc-help">{t("pc.placeHelp")}</p>
+        <RouteMapWithSearch selected={pickedPoint} onSelect={setPickedPoint} onFreePick={handleFreePick} onSearchPick={setPickedPoint} />
+        {pickedPoint && (
+          <div className="route-confirm-line">📍 {pickedPoint.resolving ? t("route.locating") : pn(pickedPoint.name)}</div>
+        )}
+      </section>
 
-      <label className="route-field-label">{t("pc.storyLabel")}</label>
-      <textarea className="route-textarea" placeholder={t("pc.storyPh")} value={story} onChange={(e) => setStory(e.target.value)} maxLength={1000} />
+      <section className="pc-section">
+        <label className="route-field-label">{t("pc.storyLabel")}</label>
+        <textarea className="route-textarea" placeholder={t("pc.storyPh")} value={story} onChange={(e) => setStory(e.target.value)} maxLength={1000} />
+      </section>
 
-      <label className="route-field-label">{t("pc.photoLabel")}</label>
-      <input ref={fileInputRef} type="file" accept="image/*" className="postcard-file-input" onChange={handlePhotoChange} />
-      {!photoPreview && (
-        <button type="button" className="postcard-upload-btn" onClick={() => fileInputRef.current && fileInputRef.current.click()}>
-          <Upload size={18} strokeWidth={1.8} /> {t("pc.upload")}
-        </button>
-      )}
-      {photoPreview && (
-        <div className="postcard-preview-wrap">
-          <img src={photoPreview} alt={t("pc.preview")} className="postcard-preview-img" />
-          <div className="postcard-preview-actions">
-            <button type="button" className="pill-btn pill-btn-ghost pill-btn-sm" onClick={() => fileInputRef.current && fileInputRef.current.click()}>{t("pc.replace")}</button>
-            <button type="button" className="pill-btn pill-btn-ghost pill-btn-sm" onClick={removePhoto}>{t("pc.remove")}</button>
+      <section className="pc-section">
+        <label className="route-field-label">{t("pc.photoLabel")}</label>
+        <input ref={fileInputRef} type="file" accept="image/*" className="postcard-file-input" onChange={handlePhotoChange} />
+        {!photoPreview && (
+          <button type="button" className="postcard-upload-btn" onClick={() => fileInputRef.current && fileInputRef.current.click()}>
+            <Upload size={22} strokeWidth={1.8} /> {t("pc.upload")}
+          </button>
+        )}
+        {photoPreview && (
+          <div className="postcard-preview-wrap">
+            <div className="pc-polaroid"><img src={photoPreview} alt={t("pc.preview")} className="postcard-preview-img" /></div>
+            <div className="postcard-preview-actions">
+              <button type="button" className="pill-btn pill-btn-ghost pill-btn-sm" onClick={() => fileInputRef.current && fileInputRef.current.click()}>{t("pc.replace")}</button>
+              <button type="button" className="pill-btn pill-btn-ghost pill-btn-sm" onClick={removePhoto}>{t("pc.remove")}</button>
+            </div>
           </div>
-        </div>
-      )}
-      {photoError && <div className="route-blocked-msg">{photoError}</div>}
+        )}
+        {photoError && <div className="route-blocked-msg">{photoError}</div>}
+      </section>
 
-      <div className="postcard-divider" />
-      <div className="route-step-heading route-step-heading-sm">{t("pc.optional")}</div>
-      <input className="route-input" placeholder={t("pc.songTitlePh")} value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
-      <input className="route-input" placeholder={t("pc.artistPh")} value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={80} />
-      <input className="route-input" placeholder={t("pc.linkPh")} value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
+      <section className="pc-section pc-section-optional">
+        <div className="route-step-heading route-step-heading-sm pc-optional-heading">{t("pc.optional")}</div>
+        <input className="route-input" placeholder={t("pc.songTitlePh")} value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
+        <input className="route-input" placeholder={t("pc.artistPh")} value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={80} />
+        <input className="route-input" placeholder={t("pc.linkPh")} value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
+      </section>
 
       <label className="postcard-consent">
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
@@ -2410,7 +2425,7 @@ function PostcardsView() {
       {blockedMsg && <div className="route-blocked-msg">{blockedMsg}</div>}
       {status === "error" && <div className="route-blocked-msg">{errorMsg}</div>}
 
-      <div className="route-nav route-nav-center">
+      <div className="route-nav route-nav-center pc-submit-row">
         <button className="pill-btn route-launch-btn" disabled={!canSubmit || status === "submitting"} onClick={handleSubmit}>
           {status === "submitting" ? t("pc.sending") : t("pc.send")}
         </button>
@@ -2461,9 +2476,10 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
     if (r === "copied") { setShareCopied(true); setTimeout(() => setShareCopied(false), 2200); }
   }
   return (
-    <div className="atlas-entry-card">
+    <div className="atlas-entry-card atlas-postcard">
       <div className="atlas-entry-kind">💌 Postcard</div>
-      {entry.photoUrl && <img src={entry.photoUrl} alt="" className="atlas-entry-photo" />}
+      {entry.photoUrl && <div className="atlas-polaroid"><img src={entry.photoUrl} alt="" className="atlas-entry-photo" /></div>}
+      {entry.placeName && <div className="atlas-postcard-place">📍 {entry.placeName}</div>}
       {entry.story && <div className="atlas-entry-story">{entry.story}</div>}
       {hasSong && <div className="atlas-entry-song">🎵 {entry.songTitle}{entry.artist ? ` — ${entry.artist}` : ""}</div>}
       {entry.displayName && <div className="atlas-entry-byline">— {entry.displayName}</div>}
@@ -2591,7 +2607,11 @@ function VanAtlasView({ sharedPostcardId, sharedNonce, myVanSongs, myVanPostcard
   const [showTextOnly, setShowTextOnly] = useState(false);
   const [sharedEntry, setSharedEntry] = useState(null); // postcard opened from a shared link or a promotion
   const [allEntries, setAllEntries] = useState(null);
+  const [atlasView, setAtlasView] = useState("map"); // map | grid  (presentation only)
+  const [gridLimit, setGridLimit] = useState(12);
+  const [openedPostcard, setOpenedPostcard] = useState(null);
   const sharedRef = useRef(null);
+  const galleryPostcards = (allEntries || []).filter((e) => e.kind === "postcard");
 
   useEffect(() => {
     let cancelled = false;
@@ -2647,7 +2667,42 @@ function VanAtlasView({ sharedPostcardId, sharedNonce, myVanSongs, myVanPostcard
       {status === "loading" && <div className="route-map-badge-standalone">{t("atlas.loading")}</div>}
       {status === "error" && <div className="route-blocked-msg">{t("atlas.error")}</div>}
 
-      {status === "ready" && (
+      {status === "ready" && galleryPostcards.length > 0 && (
+        <div className="atlas-view-toggle" role="tablist">
+          <button type="button" role="tab" aria-selected={atlasView === "map"} className={atlasView === "map" ? "atlas-view-active" : ""} onClick={() => setAtlasView("map")}>🗺️ {t("atlas.view.map")}</button>
+          <button type="button" role="tab" aria-selected={atlasView === "grid"} className={atlasView === "grid" ? "atlas-view-active" : ""} onClick={() => { setAtlasView("grid"); setOpenedPostcard(null); }}>💌 {t("atlas.view.postcards")}</button>
+        </div>
+      )}
+
+      {status === "ready" && atlasView === "grid" && galleryPostcards.length > 0 && (
+        openedPostcard ? (
+          <div className="atlas-opened fade-in">
+            <button type="button" className="atlas-back-btn" onClick={() => setOpenedPostcard(null)}>← {t("atlas.grid.back")}</button>
+            <AtlasEntryCard entry={openedPostcard} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={onSaveSong} onSavePostcard={onSavePostcard} />
+          </div>
+        ) : (
+          <div className="atlas-grid-wrap fade-in">
+            <div className="atlas-grid">
+              {galleryPostcards.slice(0, gridLimit).map((e, i) => (
+                <button type="button" key={e.id + ":" + i} className="atlas-tile" onClick={() => setOpenedPostcard(e)}>
+                  {e.photoUrl ? <img src={e.photoUrl} alt="" className="atlas-tile-img" loading="lazy" /> : <div className="atlas-tile-text">{e.story}</div>}
+                  <div className="atlas-tile-cap">
+                    <div className="atlas-tile-place">{e.placeName}</div>
+                    {e.displayName && <div className="atlas-tile-by">{e.displayName}</div>}
+                  </div>
+                </button>
+              ))}
+            </div>
+            {galleryPostcards.length > gridLimit && (
+              <button type="button" className="postcard-map-toggle" onClick={() => setGridLimit((n) => n + 12)}>
+                {t("atlas.more", { n: galleryPostcards.length - gridLimit })}
+              </button>
+            )}
+          </div>
+        )
+      )}
+
+      {status === "ready" && atlasView === "map" && (
         <>
           <div className="route-leaflet-wrap">
             <MapContainer center={[38.6, 23.4]} zoom={6} minZoom={5} scrollWheelZoom className="route-leaflet-map">
@@ -4152,14 +4207,13 @@ const CSS = `
 }
 .postcard-file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 .postcard-upload-btn {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  width: 100%; padding: 16px; border-radius: 16px; border: 1.5px dashed var(--border);
-  background: var(--surface); color: var(--text-dim); font-size: 14px; font-weight: 600; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 28px 16px; border-radius: 16px; border: 1.5px dashed var(--accent-dim);
+  background: rgba(57,172,208,.06); color: var(--accent); font-size: 14px; font-weight: 700; cursor: pointer;
 }
 .postcard-preview-wrap { margin-bottom: 4px; }
 .postcard-preview-img {
-  width: 100%; max-height: 260px; object-fit: cover; border-radius: 16px;
-  border: 1px solid var(--border); margin-bottom: 8px;
+  display: block; width: 100%; max-height: 260px; object-fit: cover; border-radius: 4px;
 }
 .postcard-preview-actions { display: flex; gap: 8px; }
 .pill-btn-sm { font-size: 12px; padding: 7px 14px; }
@@ -4171,6 +4225,72 @@ const CSS = `
 .postcard-consent input { margin-top: 2px; width: 17px; height: 17px; flex-shrink: 0; accent-color: var(--accent); }
 .postcard-success { text-align: center; padding-top: 24px; }
 .postcard-success-icon { color: var(--accent); margin-bottom: 10px; display: flex; justify-content: center; }
+.pc-success-card {
+  position: relative; background: var(--surface); border: 1.5px dashed var(--accent-dim); border-radius: 20px;
+  padding: 34px 18px 10px; margin-bottom: 14px;
+}
+.pc-stamp {
+  position: absolute; top: -18px; right: 16px; width: 44px; height: 52px; display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); border: 2px dashed var(--accent); border-radius: 4px; font-size: 22px; transform: rotate(4deg);
+}
+
+/* Postcards from the Road: presentation only */
+.pc-hero { position: relative; aspect-ratio: 16 / 9; margin: 0 -4px 16px; border-radius: 22px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0,0,0,.45); }
+.pc-hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.pc-hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(10,13,11,0) 55%, rgba(10,13,11,.7) 100%); }
+.pc-form { counter-reset: pcsec; }
+.pc-section {
+  counter-increment: pcsec; position: relative;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+  padding: 12px 14px 6px 14px; margin-bottom: 12px;
+}
+.pc-section > .route-field-label:first-child, .pc-section > .pc-optional-heading { margin-top: 0; }
+.pc-section > .route-field-label:first-child { padding-left: 30px; }
+.pc-section:not(.pc-section-optional) > .route-field-label:first-child::before {
+  content: counter(pcsec); position: absolute; left: 12px; top: 11px; width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--accent); color: var(--accent); background: rgba(57,172,208,.1); font-size: 11px; font-weight: 800;
+}
+.pc-section-optional { border-style: dashed; background: transparent; }
+.pc-section .route-textarea { margin-top: 0; margin-bottom: 10px; }
+.pc-help { margin: 0 0 12px; font-size: 13px; }
+.pc-optional-heading { margin-bottom: 10px; }
+.pc-polaroid {
+  background: #f3efe6; padding: 8px 8px 22px; border-radius: 4px; transform: rotate(-1.2deg);
+  box-shadow: 0 10px 26px rgba(0,0,0,.5); margin: 4px 2px 14px;
+}
+.pc-submit-row .route-launch-btn { width: 100%; }
+.pc-submit-row { margin-top: 12px; }
+
+/* Atlas: postcards gallery */
+.atlas-view-toggle { display: flex; gap: 6px; padding: 4px; margin: 0 0 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; }
+.atlas-view-toggle button {
+  flex: 1; padding: 10px 8px; border: none; border-radius: 999px; background: none; color: var(--text-dim);
+  font-size: 13px; font-weight: 700; cursor: pointer; min-height: 40px;
+}
+.atlas-view-toggle .atlas-view-active { background: rgba(57,172,208,.16); color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.atlas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.atlas-tile {
+  position: relative; display: block; padding: 0; border: none; cursor: pointer; text-align: left;
+  aspect-ratio: 4 / 5; border-radius: 16px; overflow: hidden; background: var(--surface-2);
+  box-shadow: 0 8px 20px rgba(0,0,0,.4);
+}
+.atlas-tile:active { transform: scale(.98); }
+.atlas-tile-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.atlas-tile-text { position: absolute; inset: 0; padding: 14px 12px 60px; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); overflow: hidden; }
+.atlas-tile-cap {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 10px 10px;
+  background: linear-gradient(180deg, rgba(10,13,11,0) 0%, rgba(10,13,11,.88) 100%);
+}
+.atlas-tile-place { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 13px; color: var(--text); overflow-wrap: anywhere; line-height: 1.25; }
+.atlas-tile-by { font-size: 11.5px; font-style: italic; color: var(--accent); margin-top: 2px; }
+.atlas-back-btn { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 700; padding: 6px 0 10px; cursor: pointer; }
+.atlas-opened { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 14px 16px 10px; margin-bottom: 14px; }
+.atlas-polaroid { background: #f3efe6; padding: 8px 8px 20px; border-radius: 4px; transform: rotate(-.8deg); box-shadow: 0 10px 24px rgba(0,0,0,.5); margin: 6px 2px 14px; }
+.atlas-polaroid .atlas-entry-photo { display: block; margin: 0; border-radius: 2px; max-height: 320px; }
+.atlas-postcard-place { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 16px; margin: 2px 0 6px; overflow-wrap: anywhere; }
+.atlas-postcard .atlas-entry-story { font-size: 14px; line-height: 1.65; color: var(--text); opacity: .86; }
+.atlas-postcard .atlas-entry-byline { font-size: 13px; font-style: italic; color: var(--accent); margin: 2px 0 8px; }
 
 .myvan-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
 .myvan-tab {
