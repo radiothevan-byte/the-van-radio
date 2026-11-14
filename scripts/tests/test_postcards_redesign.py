@@ -13,7 +13,7 @@ DATA_URI = "data:image/jpeg;base64," + base64.b64encode(PHOTO).decode()
 def pc(i, name, story, photo=True):
     return {"id": f"id-{i}", "placeName": name, "locationText": "", "latitude": str(37 + i * .3), "longitude": str(23 + i * .3),
             "story": story, "displayName": f"Φίλος {i}", "songTitle": "Τραγούδι" if i == 1 else "", "artist": "Καλλιτέχνης" if i == 1 else "",
-            "musicUrl": "", "photoUrl": DATA_URI if photo else ""}
+            "musicUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ" if i == 1 else "", "photoUrl": DATA_URI if photo else ""}
 POSTS = [pc(1, "Ναύπλιο", "Ιστορία ένα"), pc(2, "Μήλος", "Ιστορία δύο"), pc(3, "Χανιά", "Ιστορία τρία", photo=False)]
 posted = []
 def mk(postcards):
@@ -78,7 +78,13 @@ with sync_playwright() as p:
         vals=pg.locator(".atlas-opened .pcard-value").all_inner_texts(); labs=pg.locator(".atlas-opened .pcard-label").all_inner_texts()
         check(vals==["Τραγούδι","Καλλιτέχνης"] and len(labs)==2, "postcard shows song title + artist as labelled fields: %s %s"%(labs,vals))
         check(pg.locator(".atlas-opened .pcard .pcard-front img").count()==1 and pg.locator(".atlas-opened .pcard-place").is_visible() and pg.locator(".atlas-opened .pcard-sign").is_visible(), "paper postcard: photo front + place + signature")
+        check(pg.locator(".atlas-opened .pcard .pcard-song .pcard-listen").count()==1 and pg.locator(".atlas-opened .pcard-listen-icon").count()==1, "listen button with play icon is inside the card (song block)")
+        pos=pg.evaluate("""()=>{const l=document.querySelector('.atlas-opened .pcard-listen').getBoundingClientRect();const v=[...document.querySelectorAll('.atlas-opened .pcard-value')].pop().getBoundingClientRect();return {l:l.top,v:v.bottom}}""")
+        check(pos["l"]>=pos["v"]-1,"listen button sits directly below the artist: %s"%pos)
+        check(pg.locator(".atlas-opened .atlas-entry-link").count()==0, "no separate listen link left in the actions row")
+        check(pg.locator(".atlas-opened .pcard-stamp-wrap .pcard-stamp svg").count()>=1 and pg.locator(".atlas-opened .pcard-postmark").count()==1 and "💌" not in pg.locator(".atlas-opened").inner_text(), "stamp (Van icon) + postmark replace the envelope emoji")
         if w == 390: pg.screenshot(path="pc_open_390.png", full_page=True)
+        if w == 320: pg.screenshot(path="pc_open_320.png", full_page=True)
         ph=pg.locator(".atlas-opened .atlas-entry-photo")
         dims=ph.evaluate("e=>({nw:e.naturalWidth,nh:e.naturalHeight,w:e.offsetWidth,h:e.offsetHeight,fit:getComputedStyle(e).objectFit})")
         check(dims["fit"]=="contain" and abs(dims["w"]/dims["h"]-dims["nw"]/dims["nh"])<0.02,"opened photo shows whole image (natural aspect, not cropped): %s"%dims)

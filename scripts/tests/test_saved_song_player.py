@@ -45,7 +45,7 @@ with sync_playwright() as p:
     check(not pg.errs,"no page errors "+str(pg.errs)); ctx.close()
     # 2) Atlas: a postcard (shared link) with a YouTube link opens the player
     ctx,pg=new(); pg.goto(BASE+"/postcard/"+UUID); pg.wait_for_selector(".atlas-entry-card"); pg.wait_for_timeout(500)
-    btn=pg.locator(".atlas-entry-link"); check(btn.count()==1 and btn.evaluate("e=>e.tagName")=="BUTTON","Atlas postcard: 'Listen' is now an in-app button")
+    btn=pg.locator(".pcard-listen"); check(btn.count()==1 and btn.evaluate("e=>e.tagName")=="BUTTON","Atlas postcard: 'Listen' is an in-app button inside the card")
     btn.click(); pg.wait_for_selector(".sp-sheet"); pg.wait_for_timeout(400)
     check(pg.locator(".sp-title").inner_text()=="Ένα τραγούδι" and pg.evaluate("window.__yt.opts.videoId")=="AaG9nV9gzdU","Atlas postcard: player with the song, plays our player")
     check("Van Atlas" in pg.locator(".sp-head").inner_text() and pg.locator(".sp-save").count()==0,"Atlas postcard: header 'Van Atlas', no song-save button (the postcard has its own + My Van)")

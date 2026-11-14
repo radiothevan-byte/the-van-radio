@@ -2475,12 +2475,24 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
     if (r === "shared" || r === "copied") trackEvent("share", { type: "postcard", method: r });
     if (r === "copied") { setShareCopied(true); setTimeout(() => setShareCopied(false), 2200); }
   }
+  const listenLink = entry.musicUrl ? (
+    <SongPlayLink className="pcard-listen" song={{ id: `pc-${entry.id}`, title: entry.songTitle || entry.placeName || "", artist: entry.artist, link: entry.musicUrl }} heading="Van Atlas">
+      <svg className="pcard-listen-icon" width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="15" r="14" fill="#2C86A6" /><path d="M12 9.5v11l9-5.5z" fill="#f3efe6" /></svg>
+      <span>{t("atlas.listen").replace(/\s*↗\s*$/, "")}</span>
+    </SongPlayLink>
+  ) : null;
   return (
     <div className="atlas-entry-card atlas-postcard">
       <div className="pcard">
         {entry.photoUrl && <div className="pcard-front"><img src={entry.photoUrl} alt="" className="atlas-entry-photo" /></div>}
         <div className="pcard-back">
-          <div className="pcard-stamp" aria-hidden="true">💌</div>
+          <div className="pcard-stamp-wrap" aria-hidden="true">
+            <div className="pcard-stamp"><div className="pcard-stamp-in"><VanOutlineIcon size={26} strokeWidth={1.7} /><span>THE VAN</span></div></div>
+            <svg className="pcard-postmark" viewBox="0 0 64 40" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+              <circle cx="20" cy="20" r="15" /><circle cx="20" cy="20" r="10.5" strokeDasharray="2 2.6" />
+              <path d="M38 12q4-3 8 0t8 0t8 0M38 20q4-3 8 0t8 0t8 0M38 28q4-3 8 0t8 0t8 0" />
+            </svg>
+          </div>
           {entry.placeName && <div className="pcard-place atlas-postcard-place">📍 {entry.placeName}</div>}
           {entry.story && <div className="pcard-msg atlas-entry-story">{entry.story}</div>}
           {hasSong && (
@@ -2491,17 +2503,14 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
               {entry.artist && (
                 <div className="pcard-field"><span className="pcard-label">{t("pc.artistPh")}</span><span className="pcard-value">{entry.artist}</span></div>
               )}
+              {entry.musicUrl && listenLink}
             </div>
           )}
+          {!hasSong && entry.musicUrl && <div className="pcard-listen-wrap">{listenLink}</div>}
           {entry.displayName && <div className="pcard-sign atlas-entry-byline">— {entry.displayName}</div>}
         </div>
       </div>
-      <div className="atlas-entry-actions">
-        {entry.musicUrl && (
-          <SongPlayLink className="atlas-entry-link" song={{ id: `pc-${entry.id}`, title: entry.songTitle || entry.placeName || "", artist: entry.artist, link: entry.musicUrl }} heading="Van Atlas">
-            {t("atlas.listen")}
-          </SongPlayLink>
-        )}
+      <div className="atlas-entry-actions atlas-postcard-actions">
         {canShare && (
           <button className="atlas-entry-save" onClick={handleShare}>{shareCopied ? t("share.copied") : t("share.button")}</button>
         )}
@@ -2683,7 +2692,7 @@ function VanAtlasView({ sharedPostcardId, sharedNonce, myVanSongs, myVanPostcard
       {status === "ready" && galleryPostcards.length > 0 && (
         <div className="atlas-view-toggle" role="tablist">
           <button type="button" role="tab" aria-selected={atlasView === "map"} className={atlasView === "map" ? "atlas-view-active" : ""} onClick={() => setAtlasView("map")}>🗺️ {t("atlas.view.map")}</button>
-          <button type="button" role="tab" aria-selected={atlasView === "grid"} className={atlasView === "grid" ? "atlas-view-active" : ""} onClick={() => { setAtlasView("grid"); setOpenedPostcard(null); }}>💌 {t("atlas.view.postcards")}</button>
+          <button type="button" role="tab" aria-selected={atlasView === "grid"} className={atlasView === "grid" ? "atlas-view-active" : ""} onClick={() => { setAtlasView("grid"); setOpenedPostcard(null); }}><svg className="atlas-view-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><rect x="1.5" y="3" width="13" height="10" rx="1.5" /><rect x="9.2" y="5" width="3.3" height="3.8" rx=".4" /><path d="M3.8 6.2h3.6M3.8 8.4h3.6M3.8 10.4h6" strokeLinecap="round" /></svg> {t("atlas.view.postcards")}</button>
         </div>
       )}
 
@@ -4291,6 +4300,7 @@ const CSS = `
   flex: 1; padding: 10px 8px; border: none; border-radius: 999px; background: none; color: var(--text-dim);
   font-size: 13px; font-weight: 700; cursor: pointer; min-height: 40px;
 }
+.atlas-view-toggle .atlas-view-icon { vertical-align: -2px; margin-right: 2px; }
 .atlas-view-toggle .atlas-view-active { background: rgba(57,172,208,.16); color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .atlas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .atlas-tile {
@@ -4319,10 +4329,20 @@ const CSS = `
 .pcard-front .atlas-entry-photo { display: block; width: 100%; height: auto; max-height: 72vh; margin: 0; border-radius: 3px; object-fit: contain; background: #e3ddcf; }
 .pcard-back { padding: 14px 4px 14px; overflow: hidden; border-top: 2px dashed rgba(42,38,32,.22); }
 .pcard-front + .pcard-back { margin-top: 2px; }
+.pcard .pcard-stamp-wrap { position: relative; float: right; width: 62px; height: 74px; margin: 0 0 6px 10px; }
 .pcard .pcard-stamp {
-  float: right; width: 38px; height: 46px; margin: 0 0 6px 10px; display: flex; align-items: center; justify-content: center;
-  border: 2px dashed rgba(42,38,32,.4); border-radius: 3px; font-size: 19px; transform: rotate(4deg); opacity: .85;
+  position: absolute; right: 0; top: 0; width: 54px; height: 66px; transform: rotate(3deg);
+  padding: 4px;
+  background: radial-gradient(circle at 4px 4px, transparent 2.4px, #fffaf0 2.6px) -4px -4px / 8px 8px;
+  filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.35));
 }
+.pcard .pcard-stamp-in {
+  width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  background: linear-gradient(160deg, #39ACD0 0%, #2C86A6 100%); border: 1.5px solid #fffaf0; outline: 1px solid rgba(44,134,166,.6); outline-offset: -4px;
+  color: #fffaf0; border-radius: 1px;
+}
+.pcard .pcard-stamp-in span { font-size: 7px; font-weight: 800; letter-spacing: .14em; }
+.pcard .pcard-postmark { position: absolute; left: -26px; top: 26px; width: 64px; height: 40px; color: rgba(42,38,32,.42); transform: rotate(-10deg); pointer-events: none; }
 .pcard .pcard-place { display: none; align-items: center; gap: 4px; font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 17px; line-height: 1.25; color: #1d1a16; margin: 0 0 8px; min-height: 30px; overflow-wrap: anywhere; }
 .atlas-opened .pcard .pcard-place { display: flex; }
 .pcard .pcard-msg { font-size: 14.5px; line-height: 1.7; color: #3a352d; margin: 0 0 12px; overflow-wrap: anywhere; white-space: pre-line; }
@@ -4331,6 +4351,11 @@ const CSS = `
 .pcard .pcard-field + .pcard-field { margin-top: 6px; }
 .pcard .pcard-label { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #7a7263; }
 .pcard .pcard-value { font-size: 15px; font-weight: 700; color: #1d1a16; overflow-wrap: anywhere; }
+.pcard .pcard-listen { display: inline-flex; align-items: center; gap: 9px; margin-top: 10px; padding: 0; background: none; border: 0; cursor: pointer; font-family: inherit; font-size: 14px; font-weight: 700; color: #2C86A6; text-decoration: none; text-align: left; }
+.pcard .pcard-listen-icon { flex: none; }
+.pcard .pcard-listen-wrap { clear: both; margin: 0 0 10px; }
+.pcard .pcard-song .pcard-listen { display: flex; padding-top: 10px; border-top: 1px solid rgba(42,38,32,.1); width: 100%; }
+.atlas-postcard-actions { justify-content: flex-end; }
 .pcard .pcard-sign { clear: both; font-size: 14px; font-style: italic; color: #2C86A6; text-align: right; margin: 6px 0 0; }
 
 .myvan-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
