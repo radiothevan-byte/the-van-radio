@@ -2477,12 +2477,25 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
   }
   return (
     <div className="atlas-entry-card atlas-postcard">
-      <div className="atlas-entry-kind">💌 Postcard</div>
-      {entry.photoUrl && <div className="atlas-polaroid"><img src={entry.photoUrl} alt="" className="atlas-entry-photo" /></div>}
-      {entry.placeName && <div className="atlas-postcard-place">📍 {entry.placeName}</div>}
-      {entry.story && <div className="atlas-entry-story">{entry.story}</div>}
-      {hasSong && <div className="atlas-entry-song">🎵 {entry.songTitle}{entry.artist ? ` — ${entry.artist}` : ""}</div>}
-      {entry.displayName && <div className="atlas-entry-byline">— {entry.displayName}</div>}
+      <div className="pcard">
+        {entry.photoUrl && <div className="pcard-front"><img src={entry.photoUrl} alt="" className="atlas-entry-photo" /></div>}
+        <div className="pcard-back">
+          <div className="pcard-stamp" aria-hidden="true">💌</div>
+          {entry.placeName && <div className="pcard-place atlas-postcard-place">📍 {entry.placeName}</div>}
+          {entry.story && <div className="pcard-msg atlas-entry-story">{entry.story}</div>}
+          {hasSong && (
+            <div className="pcard-song atlas-entry-song">
+              {entry.songTitle && (
+                <div className="pcard-field"><span className="pcard-label">🎵 {t("pc.songTitlePh")}</span><span className="pcard-value">{entry.songTitle}</span></div>
+              )}
+              {entry.artist && (
+                <div className="pcard-field"><span className="pcard-label">{t("pc.artistPh")}</span><span className="pcard-value">{entry.artist}</span></div>
+              )}
+            </div>
+          )}
+          {entry.displayName && <div className="pcard-sign atlas-entry-byline">— {entry.displayName}</div>}
+        </div>
+      </div>
       <div className="atlas-entry-actions">
         {entry.musicUrl && (
           <SongPlayLink className="atlas-entry-link" song={{ id: `pc-${entry.id}`, title: entry.songTitle || entry.placeName || "", artist: entry.artist, link: entry.musicUrl }} heading="Van Atlas">
@@ -4295,13 +4308,30 @@ const CSS = `
 .atlas-tile-place { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 13px; color: var(--text); overflow-wrap: anywhere; line-height: 1.25; }
 .atlas-tile-by { font-size: 11.5px; font-style: italic; color: var(--accent); margin-top: 2px; }
 .atlas-back-btn { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 700; padding: 6px 0 10px; cursor: pointer; }
-.atlas-opened .atlas-postcard-place { display: block; }
-.atlas-opened { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 14px 16px 10px; margin-bottom: 14px; }
-.atlas-polaroid { background: #f3efe6; padding: 8px 8px 20px; border-radius: 4px; transform: rotate(-.8deg); box-shadow: 0 10px 24px rgba(0,0,0,.5); margin: 6px 2px 14px; }
-.atlas-polaroid .atlas-entry-photo { display: block; width: 100%; height: auto; max-height: 72vh; margin: 0; border-radius: 2px; object-fit: contain; }
-.atlas-postcard-place { display: none; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 16px; margin: 2px 0 6px; overflow-wrap: anywhere; }
-.atlas-postcard .atlas-entry-story { font-size: 14px; line-height: 1.65; color: var(--text); opacity: .86; }
-.atlas-postcard .atlas-entry-byline { font-size: 13px; font-style: italic; color: var(--accent); margin: 2px 0 8px; }
+.atlas-opened { margin-bottom: 14px; }
+.atlas-opened .atlas-entry-card { border-top: none; padding-top: 0; }
+/* The postcard: photo on the front, the written side below it (paper look). */
+.pcard {
+  background: #f3efe6; color: #2a2620; border-radius: 8px; padding: 10px 10px 0;
+  box-shadow: 0 14px 34px rgba(0,0,0,.55); margin: 6px 0 14px; overflow: hidden;
+}
+.pcard-front { margin: 0 0 12px; }
+.pcard-front .atlas-entry-photo { display: block; width: 100%; height: auto; max-height: 72vh; margin: 0; border-radius: 3px; object-fit: contain; background: #e3ddcf; }
+.pcard-back { padding: 14px 4px 14px; overflow: hidden; border-top: 2px dashed rgba(42,38,32,.22); }
+.pcard-front + .pcard-back { margin-top: 2px; }
+.pcard .pcard-stamp {
+  float: right; width: 38px; height: 46px; margin: 0 0 6px 10px; display: flex; align-items: center; justify-content: center;
+  border: 2px dashed rgba(42,38,32,.4); border-radius: 3px; font-size: 19px; transform: rotate(4deg); opacity: .85;
+}
+.pcard .pcard-place { display: none; align-items: center; gap: 4px; font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 17px; line-height: 1.25; color: #1d1a16; margin: 0 0 8px; min-height: 30px; overflow-wrap: anywhere; }
+.atlas-opened .pcard .pcard-place { display: flex; }
+.pcard .pcard-msg { font-size: 14.5px; line-height: 1.7; color: #3a352d; margin: 0 0 12px; overflow-wrap: anywhere; white-space: pre-line; }
+.pcard .pcard-song { clear: both; margin: 6px 0 10px; padding: 10px 12px; background: rgba(42,38,32,.06); border-left: 3px solid #2C86A6; border-radius: 4px; font-weight: 400; }
+.pcard .pcard-field { display: flex; flex-direction: column; gap: 1px; }
+.pcard .pcard-field + .pcard-field { margin-top: 6px; }
+.pcard .pcard-label { font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #7a7263; }
+.pcard .pcard-value { font-size: 15px; font-weight: 700; color: #1d1a16; overflow-wrap: anywhere; }
+.pcard .pcard-sign { clear: both; font-size: 14px; font-style: italic; color: #2C86A6; text-align: right; margin: 6px 0 0; }
 
 .myvan-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
 .myvan-tab {
