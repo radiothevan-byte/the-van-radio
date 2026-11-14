@@ -1710,15 +1710,19 @@ function RouteStepper({ step }) {
   const idx = ROUTE_STEP_INDEX[step];
   if (idx === undefined) return null;
   return (
-    <div className="route-stepper">
-      {ROUTE_STEP_LABELS.map((_l, i) => (
-        <React.Fragment key={i}>
-          <span className={`route-step ${i === idx ? "route-step-active" : i < idx ? "route-step-done" : ""}`}>
+    <div className="route-stepper" role="progressbar" aria-valuemin={1} aria-valuemax={ROUTE_STEP_LABELS.length} aria-valuenow={idx + 1}>
+      <div className="route-progress">
+        {ROUTE_STEP_LABELS.map((_l, i) => (
+          <span key={i} className={`route-progress-seg ${i === idx ? "route-progress-active" : i < idx ? "route-progress-done" : ""}`} />
+        ))}
+      </div>
+      <div className="route-step-names">
+        {ROUTE_STEP_LABELS.map((_l, i) => (
+          <span key={i} className={`route-step ${i === idx ? "route-step-active" : i < idx ? "route-step-done" : ""}`}>
             {String(i + 1).padStart(2, "0")} {t("route.step." + i)}
           </span>
-          {i < ROUTE_STEP_LABELS.length - 1 && <span className="route-step-arrow">→</span>}
-        </React.Fragment>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -1942,13 +1946,21 @@ function PickRouteView() {
   return (
     <div className="view">
       {step === "intro" && (
-        <div className="route-intro fade-in">
+        <div className="route-intro route-hero fade-in">
+          <div className="route-hero-road" aria-hidden="true">
+            <span className="route-hero-van">🚐</span>
+          </div>
           <div className="eyebrow">PICK THE ROUTE 🚐</div>
           <h1 className="page-title">{t("route.title")}</h1>
           <p className="route-intro-text">
             {t("route.intro")}
           </p>
-          <button className="pill-btn" onClick={() => setStep("destination")}>{t("route.start")}</button>
+          <ol className="route-hero-steps">
+            {ROUTE_STEP_LABELS.map((_l, i) => (
+              <li key={i}><span className="route-hero-num">{i + 1}</span>{t("route.step." + i)}</li>
+            ))}
+          </ol>
+          <button className="pill-btn route-launch-btn" onClick={() => setStep("destination")}>{t("route.start")}</button>
         </div>
       )}
 
@@ -1997,14 +2009,20 @@ function PickRouteView() {
         <div className="fade-in">
           <RouteStepper step={step} />
           <div className="route-step-heading">{t("route.songHeading")}</div>
-          <label className="route-field-label">{t("route.nameLabel")}</label>
-          <input className="route-input" placeholder={t("route.namePh")} value={userName} onChange={(e) => setUserName(e.target.value)} maxLength={60} />
-          <p className="route-intro-text">{t("route.songAsk")}</p>
-          <input className="route-input" placeholder={t("route.songTitlePh")} value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
-          <input className="route-input" placeholder={t("route.artistPh")} value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={80} />
-          <input className="route-input" placeholder={t("route.linkPh")} value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
-          <div className="route-step-heading route-step-heading-sm">{t("route.whySong")}</div>
-          <textarea className="route-textarea" placeholder={t("route.storyPh")} value={story} onChange={(e) => setStory(e.target.value)} maxLength={500} />
+          <div className="route-form-card">
+            <label className="route-field-label">{t("route.nameLabel")}</label>
+            <input className="route-input" placeholder={t("route.namePh")} value={userName} onChange={(e) => setUserName(e.target.value)} maxLength={60} />
+          </div>
+          <div className="route-form-card route-form-card-song">
+            <p className="route-form-ask">{t("route.songAsk")}</p>
+            <input className="route-input" placeholder={t("route.songTitlePh")} value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
+            <input className="route-input" placeholder={t("route.artistPh")} value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={80} />
+            <input className="route-input" placeholder={t("route.linkPh")} value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
+          </div>
+          <div className="route-form-card">
+            <div className="route-step-heading route-step-heading-sm route-step-heading-flush">{t("route.whySong")}</div>
+            <textarea className="route-textarea" placeholder={t("route.storyPh")} value={story} onChange={(e) => setStory(e.target.value)} maxLength={500} />
+          </div>
           <div className="route-nav">
             <button className="pill-btn pill-btn-ghost" onClick={() => setStep("genre")}>{t("route.back")}</button>
             <button className="pill-btn" disabled={!canProceedSong} onClick={() => setStep("preview")}>{t("route.continue")}</button>
@@ -2029,11 +2047,11 @@ function PickRouteView() {
           ) : (
             <RouteLeafletJourneyMap destination={destination} mode="preview" vanPct={0} routeCoords={routeCoords} routeStatus={routeStatus} />
           )}
-          <div className="route-preview-card">
-            <div>{t("route.sum.name")} <strong>{userName.trim()}</strong></div>
-            <div>{t("route.sum.dest")} <strong>{pn(destination.name)}</strong></div>
-            <div>{t("route.sum.genre")} <strong>{genreLabel(genre)}</strong></div>
-            <div>{t("route.sum.song")} <strong>{songTitle} — {artist}</strong></div>
+          <div className="route-preview-card route-ticket">
+            <div><span>{t("route.sum.name")}</span> <strong>{userName.trim()}</strong></div>
+            <div><span>{t("route.sum.dest")}</span> <strong>{pn(destination.name)}</strong></div>
+            <div><span>{t("route.sum.genre")}</span> <strong>{genreLabel(genre)}</strong></div>
+            <div><span>{t("route.sum.song")}</span> <strong>{songTitle} — {artist}</strong></div>
           </div>
           {blockedMsg && <div className="route-blocked-msg">{blockedMsg}</div>}
           <div className="route-nav route-nav-center">
@@ -2097,9 +2115,12 @@ function PickRouteView() {
 
       {step === "arrived" && (
         <div className="fade-in route-arrived">
+          <div className="route-arrived-badge" aria-hidden="true">✓</div>
           <div className="route-step-heading route-step-heading-center">{t("route.arrived")}</div>
-          <div className="route-arrived-dest">{destination.name}</div>
-          <div className="route-arrived-song">{t("route.arrivedSong")}<br /><strong>{artist} — {songTitle}</strong></div>
+          <div className="route-arrived-card">
+            <div className="route-arrived-dest">📍 {destination.name}</div>
+            <div className="route-arrived-song">{t("route.arrivedSong")}<br /><strong>{artist} — {songTitle}</strong></div>
+          </div>
           <div className="route-arrived-note">{t("route.arrivedNote")}</div>
           <p className="route-intro-text route-intro-text-center">{t("route.arrivedMaybe")}</p>
           <div className="route-nav route-nav-center">
@@ -3803,14 +3824,68 @@ const CSS = `
   padding: 12px 22px; border-radius: 999px; cursor: pointer;
 }
 .pill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.route-stepper {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.03em;
-  color: var(--text-dim2); margin-bottom: 18px;
+.route-stepper { margin-bottom: 20px; }
+.route-progress { display: flex; gap: 6px; margin-bottom: 8px; }
+.route-progress-seg { flex: 1; height: 4px; border-radius: 4px; background: var(--border); transition: background .3s; }
+.route-progress-done { background: var(--accent-dim); }
+.route-progress-active { background: var(--accent); box-shadow: 0 0 8px rgba(57,172,208,.55); }
+.route-step-names {
+  display: flex; justify-content: space-between; gap: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.03em; color: var(--text-dim2);
 }
+.route-step-names .route-step { flex: 1; min-width: 0; white-space: nowrap; }
+.route-step-names .route-step:last-child { text-align: right; }
+.route-step-names .route-step:not(:first-child):not(:last-child) { text-align: center; }
 .route-step-active { color: var(--accent); }
 .route-step-done { color: var(--text-dim); }
-.route-step-arrow { color: var(--text-dim2); }
+
+.route-hero { padding-top: 6px; }
+.route-hero-road {
+  position: relative; height: 92px; margin: 0 -4px 14px; border-radius: 22px; overflow: hidden;
+  background: radial-gradient(120% 140% at 50% 120%, rgba(57,172,208,.22) 0%, rgba(57,172,208,0) 60%), linear-gradient(180deg, #0f1613 0%, #0a0d0b 100%);
+  border: 1px solid var(--border);
+}
+.route-hero-road::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 22px; height: 3px;
+  background: repeating-linear-gradient(90deg, rgba(244,247,245,.55) 0 18px, transparent 18px 34px);
+  opacity: .5;
+}
+.route-hero-van { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%); font-size: 38px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.6)); }
+.route-hero-steps {
+  list-style: none; margin: 0 0 22px; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+}
+.route-hero-steps li {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .03em; color: var(--text-dim);
+}
+.route-hero-num {
+  width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--accent); color: var(--accent); font-size: 12px; background: rgba(57,172,208,.1);
+}
+.route-form-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+  padding: 14px 14px 4px; margin-bottom: 12px;
+}
+.route-form-card .route-textarea { margin-top: 0; margin-bottom: 10px; }
+.route-form-card .route-field-label { display: block; margin: 0 0 8px; padding: 0; }
+.route-form-card .route-step-heading { margin-bottom: 10px; }
+@media (max-width: 360px) { .route-step-names { font-size: 8.5px; letter-spacing: 0; } .route-hero-steps li { font-size: 8.5px; } }
+.route-form-ask { font-size: 14px; line-height: 1.5; color: var(--text); margin: 0 0 12px; font-weight: 600; }
+.route-form-card .route-step-heading-flush { margin-top: 0; }
+.route-ticket { position: relative; border-style: dashed; border-width: 1.5px; border-color: var(--accent-dim); background: linear-gradient(180deg, rgba(57,172,208,.08), var(--surface)); }
+.route-ticket > div { display: flex; flex-direction: column; line-height: 1.4; padding: 6px 0; }
+.route-ticket > div + div { border-top: 1px solid var(--border); }
+.route-ticket > div > span { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
+.route-ticket > div > strong { font-size: 15px; overflow-wrap: anywhere; }
+.route-arrived-badge {
+  width: 56px; height: 56px; margin: 4px auto 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: rgba(57,172,208,.14); border: 2px solid var(--accent); color: var(--accent); font-size: 28px; font-weight: 800;
+}
+.route-arrived-card {
+  background: var(--surface); border: 1px solid var(--accent-dim); border-radius: 20px; padding: 18px 16px; margin: 6px 0 18px;
+}
+.route-arrived-card .route-arrived-dest { margin-bottom: 10px; overflow-wrap: anywhere; }
+.route-arrived-card .route-arrived-song { margin-bottom: 0; overflow-wrap: anywhere; }
 .route-step-heading {
   font-family: 'Poppins', sans-serif; font-weight: 800; font-size: 19px;
   margin-bottom: 14px;
@@ -3863,6 +3938,7 @@ const CSS = `
 }
 .route-confirm-line {
   text-align: center; font-size: 14px; font-weight: 700; margin-bottom: 16px;
+  background: rgba(57,172,208,.08); border: 1px solid var(--accent-dim); border-radius: 16px; padding: 12px 14px;
 }
 .route-board-clickable { cursor: crosshair; }
 .route-pin-custom { color: var(--accent); }
@@ -3877,10 +3953,12 @@ const CSS = `
 }
 .route-genre-card {
   background: var(--surface); border: 1px solid var(--border); color: var(--text);
-  border-radius: 16px; padding: 16px 10px; font-size: 14px; font-weight: 700;
-  cursor: pointer; text-align: center;
+  border-radius: 16px; padding: 20px 10px; min-height: 64px; font-size: 14.5px; font-weight: 700;
+  cursor: pointer; text-align: center; transition: border-color .2s, background .2s, transform .15s;
 }
-.route-genre-active { border-color: var(--accent); color: var(--accent); background: rgba(57,172,208,0.1); }
+.route-genre-card:active { transform: scale(.97); }
+.route-genre-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.route-genre-active { border-color: var(--accent); color: var(--accent); background: rgba(57,172,208,0.12); box-shadow: 0 0 0 1px var(--accent) inset; }
 
 .route-input {
   width: 100%; padding: 13px 15px; margin-bottom: 10px;
