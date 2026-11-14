@@ -107,20 +107,13 @@ export default async function handler(request) {
       h("div", { marginTop: 14, fontSize: 21, fontWeight: 500, color: "rgba(255,255,255,.55)", letterSpacing: 2 }, "The Van Web App"),
     ]);
 
-    // TEMP-DEBUG-B64 (removed before merge): lets the preview be inspected as base64 text
-    const img = new ImageResponse(tree, {
+    return new ImageResponse(tree, {
       width: 1200,
       height: 630,
       fonts: [{ name: "Inter", data: regular, weight: 500, style: "normal" }, { name: "Inter", data: bold, weight: 700, style: "normal" }],
       headers: { "Cache-Control": "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400" },
     });
-    if (url.searchParams.get("b64") === "1") {
-      const bytes = new Uint8Array(await img.arrayBuffer()); let bin = ""; for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode(...bytes.subarray(i, i + 8192));
-      return new Response(btoa(bin), { headers: { "content-type": "text/plain" } });
-    }
-    return img;
   } catch (e) {
-    if (url.searchParams.get("b64") === "1") return new Response("ERR " + (e && e.message), { headers: { "content-type": "text/plain" } });
     return fallback();
   }
 }
