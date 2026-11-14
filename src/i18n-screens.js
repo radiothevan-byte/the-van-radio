@@ -141,6 +141,8 @@ export const SCREENS_EL = {
   "atlas.grid.back": "Όλες οι καρτ ποστάλ",
   // Sharing
   "share.button": "Μοιράσου",
+  "share.image": "Ως εικόνα",
+  "share.imageFail": "Δεν έγινε να φτιαχτεί η εικόνα — μοιράσου το link.",
   "share.copied": "Ο σύνδεσμος αντιγράφηκε",
   "share.journeyText": "Άκου αυτή τη διαδρομή στο The Van.",
   "share.postcardText": "Μια καρτ ποστάλ από το The Van.",
@@ -300,6 +302,8 @@ export const SCREENS_EN = {
   "atlas.view.postcards": "Postcards",
   "atlas.grid.back": "All postcards",
   "share.button": "Share",
+  "share.image": "As image",
+  "share.imageFail": "Could not create the image — share the link instead.",
   "share.copied": "Link copied",
   "share.journeyText": "Listen to this journey on The Van.",
   "share.postcardText": "A postcard from The Van.",

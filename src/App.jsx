@@ -15,7 +15,8 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LangProvider, LangToggle, useLang, DICT, placeLabel } from "./i18n.jsx";
 import { ROADBOOK_EN } from "./i18n-screens.js";
-import { shareLink, journeyShareUrl, postcardShareUrl } from "./share.js";
+import { shareLink, shareImage, canShareImages, journeyShareUrl, postcardShareUrl } from "./share.js";
+import { renderPostcardImage } from "./postcardimage.js";
 import { ContentProvider, SongOfTheDayCard, VanPollCard, SongPlayLink, CONTENT_CSS } from "./content.jsx";
 import { trackEvent, trackReturningVisit } from "./analytics.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
@@ -2438,6 +2439,17 @@ function PostcardsView() {
 function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSavePostcard }) {
   const { t } = useLang();
   const [shareCopied, setShareCopied] = useState(false);
+  const [imgBlob, setImgBlob] = useState(null);
+  const [imgNote, setImgNote] = useState("");
+  const imgOk = entry.kind !== "route" && !!entry.id && !String(entry.id).startsWith("postcard-") && canShareImages();
+  // Pre-render the share picture while the card is open, so the share tap can hand it straight to
+  // the native sheet (browsers only allow sharing right after a tap).
+  useEffect(() => {
+    if (!imgOk) return undefined;
+    let alive = true; setImgBlob(null);
+    renderPostcardImage(entry, { songTitle: t("pc.songTitlePh"), artist: t("pc.artistPh"), listen: t("atlas.listen").replace(/\s*↗\s*$/, "") }).then((b) => { if (alive) setImgBlob(b); });
+    return () => { alive = false; };
+  }, [imgOk, entry.id, entry.photoUrl, entry.story, entry.placeName, entry.songTitle, entry.artist, entry.musicUrl, entry.displayName, t]);
   const hasSong = !!(entry.songTitle || entry.artist);
   if (entry.kind === "route") {
     const songId = `route-${entry.id}`;
@@ -2474,6 +2486,12 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
     const r = await shareLink({ title: entry.placeName ? `${entry.placeName} — The Van` : "The Van", text: t("share.postcardText"), url: postcardShareUrl(entry.id) });
     if (r === "shared" || r === "copied") trackEvent("share", { type: "postcard", method: r });
     if (r === "copied") { setShareCopied(true); setTimeout(() => setShareCopied(false), 2200); }
+  }
+  async function handleShareImage() {
+    if (!imgBlob) { setImgNote(t("share.imageFail")); setTimeout(() => setImgNote(""), 3000); return; }
+    const r = await shareImage({ blob: imgBlob, filename: "the-van-postcard.png", title: entry.placeName ? `${entry.placeName} — The Van` : "The Van", text: t("share.postcardText"), url: postcardShareUrl(entry.id) });
+    if (r === "shared") trackEvent("share", { type: "postcard", method: "image" });
+    if (r === "failed") { setImgNote(t("share.imageFail")); setTimeout(() => setImgNote(""), 3000); }
   }
   const listenLink = entry.musicUrl ? (
     <SongPlayLink className="pcard-listen" song={{ id: `pc-${entry.id}`, title: entry.songTitle || entry.placeName || "", artist: entry.artist, link: entry.musicUrl }} heading="Van Atlas">
@@ -2514,12 +2532,16 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
         {canShare && (
           <button className="atlas-entry-save" onClick={handleShare}>{shareCopied ? t("share.copied") : t("share.button")}</button>
         )}
+        {canShare && imgOk && imgBlob && (
+          <button className="atlas-entry-save" onClick={handleShareImage}>{t("share.image")}</button>
+        )}
         <button
           className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
           onClick={() => onSavePostcard({ id: entry.id, placeName: entry.placeName, story: entry.story, photoUrl: entry.photoUrl, songTitle: entry.songTitle || "", artist: entry.artist || "", musicUrl: entry.musicUrl || "" })}
         >
           {saved ? t("atlas.inMyVan") : "+ My Van"}
         </button>
+        {imgNote && <div className="atlas-postcard-note">{imgNote}</div>}
       </div>
     </div>
   );
@@ -4355,7 +4377,8 @@ const CSS = `
 .pcard .pcard-listen-icon { flex: none; }
 .pcard .pcard-listen-wrap { clear: both; margin: 0 0 10px; }
 .pcard .pcard-song .pcard-listen { display: flex; padding-top: 10px; border-top: 1px solid rgba(42,38,32,.1); width: 100%; }
-.atlas-postcard-actions { justify-content: flex-end; }
+.atlas-postcard-actions { justify-content: flex-end; flex-wrap: wrap; }
+.atlas-postcard-note { flex: 1 0 100%; text-align: right; font-size: 12px; color: var(--muted, #9aa6ab); }
 .pcard .pcard-sign { clear: both; font-size: 14px; font-style: italic; color: #2C86A6; text-align: right; margin: 6px 0 0; }
 
 .myvan-tabs { display: flex; gap: 6px; margin-bottom: 16px; }

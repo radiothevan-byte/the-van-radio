@@ -32,6 +32,30 @@ export async function shareLink({ title, text, url }) {
   }
 }
 
+// Can this browser hand an image FILE to the native share sheet? (Mobile Chrome/Safari yes; most desktops no.)
+export function canShareImages() {
+  try {
+    if (typeof navigator === "undefined" || typeof navigator.share !== "function" || typeof navigator.canShare !== "function") return false;
+    return navigator.canShare({ files: [new File([new Blob(["x"], { type: "image/png" })], "postcard.png", { type: "image/png" })] });
+  } catch (e) { return false; }
+}
+
+// Share a picture through the native sheet (the link goes in the caption, since some apps drop `url`
+// when a file is attached). Resolves to "shared" | "cancelled" | "failed". Never throws.
+// Call it straight from the click with an already-rendered blob so the browser still sees the tap.
+export async function shareImage({ blob, filename, title, text, url }) {
+  try {
+    if (!blob) return "failed";
+    const file = new File([blob], filename || "postcard.png", { type: "image/png" });
+    if (!navigator.canShare || !navigator.canShare({ files: [file] })) return "failed";
+    await navigator.share({ files: [file], title, text: url ? `${text} ${url}` : text });
+    return "shared";
+  } catch (e) {
+    if (e && e.name === "AbortError") return "cancelled";
+    return "failed";
+  }
+}
+
 // Absolute, shareable links. Journey ids are the numbers from "#N" in the sheet.
 export function journeyShareUrl(id) {
   return `${window.location.origin}/journey/${encodeURIComponent(id)}`;
