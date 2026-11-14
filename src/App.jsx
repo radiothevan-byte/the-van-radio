@@ -2831,7 +2831,7 @@ function HomeHubView({ onNavigate }) {
 
       <PromotionSlot placement="HOME_HERO" variant="hero" />
       <PromotionSlot placement="HOME_FEATURED" variant="list" titleKey="promo.featured" />
-      <SongOfTheDayCard />
+      <SongOfTheDayCard art={ROADBOOK_BG_02} />
       <VanPollCard />
 
       <button className="hub-card hub-card-atlas" style={art(HUB_ART_ATLAS, 0.0, "auto 104%", "108% 50%")} onClick={() => onNavigate("atlas")}>
@@ -2885,6 +2885,22 @@ function HomeHubView({ onNavigate }) {
   );
 }
 
+// Line-art outline of the brand Van (a split-window T2 bus with a roof rack), drawn in the same
+// stroke style as the other tab icons (lucide: 24x24, round caps, currentColor).
+function VanOutlineIcon({ size = 21, strokeWidth = 1.8 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="tab-van-outline">
+      <path d="M6 4.2h9.5" />
+      <path d="M7.8 4.2v1.8M13.7 4.2v1.8" />
+      <path d="M3 17.4V8.6A2.6 2.6 0 0 1 5.6 6h9.5a2.6 2.6 0 0 1 2.1 1.1l2.7 3.7a2.6 2.6 0 0 1 .5 1.5v5.1" />
+      <path d="M3 17.4h1.6M8.6 17.4h6.8M19.4 17.4h1.5" />
+      <path d="M3 12.2h16.9M9.9 6v6.2M14.7 6v6.2" />
+      <circle cx="6.6" cy="17.4" r="2" />
+      <circle cx="17.4" cy="17.4" r="2" />
+    </svg>
+  );
+}
+
 function TabBar({ tab, setTab }) {
   const tabs = [
     { key: "home", label: "Home" },
@@ -2899,7 +2915,7 @@ function TabBar({ tab, setTab }) {
         return (
           <button key={t.key} className={`tab-btn ${active ? "tab-active" : ""}`} onClick={() => setTab(t.key)}>
             {t.key === "home" ? (
-              <img src={VAN_B64} alt="" className={`tab-van-icon ${active ? "tab-van-active" : "tab-van-inactive"}`} />
+              <VanOutlineIcon size={22} strokeWidth={active ? 2.2 : 1.8} />
             ) : t.key === "journeys" ? (
               <Radio size={21} strokeWidth={active ? 2.2 : 1.8} />
             ) : t.key === "myvan" ? (
@@ -3624,13 +3640,7 @@ const CSS = `
 }
 .tab-btn.tab-active { color: var(--accent); }
 .tab-label { font-size: 10.5px; font-weight: 600; }
-.tab-van-icon {
-  width: 22px; height: 22px; border-radius: 7px;
-  object-fit: cover;
-  transition: filter 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
-}
-.tab-van-inactive { filter: grayscale(1) brightness(0.75); opacity: 0.75; }
-.tab-van-active { filter: none; opacity: 1; box-shadow: 0 0 0 2px var(--accent); }
+.tab-van-outline { display: block; }
 
 /* Journey detail overlay */
 .detail-overlay {

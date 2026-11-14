@@ -5,7 +5,8 @@
 // answer simply renders nothing (Home stays exactly as it was).
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLang } from "./i18n.jsx";
-import { SongPlayerSheet, parseSongLink, SONGPLAYER_CSS } from "./songplayer.jsx";
+import { SongPlayerSheet, parseSongLink, SONGPLAYER_CSS, ShareIcon, HeartIcon } from "./songplayer.jsx";
+import { shareLink } from "./share.js";
 
 const CACHE_KEY = "tvr_content_cache_v1";
 const CACHE_FRESH_MS = 5 * 60 * 1000;
@@ -126,10 +127,11 @@ export function SongPlayLink({ song, className, children, heading, saved, onSave
   );
 }
 
-export function SongOfTheDayCard() {
+export function SongOfTheDayCard({ art }) {
   const { song, onEvent, myVanSongs, onSaveSong, onSongPlay } = useContext(ContentContext);
   const { lang, t } = useLang();
   const [open, setOpen] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   if (!song) return null;
   const note = (lang === "en" ? song.noteEn || song.noteEl : song.noteEl || song.noteEn) || "";
@@ -138,9 +140,19 @@ export function SongOfTheDayCard() {
   const songKey = `sotd:${song.id || song.title}`;
   const saved = (myVanSongs || []).some((x) => x.id === songKey);
   const openPlayer = () => { setOpen(true); if (onEvent) onEvent("song_of_day_click", { id: song.id }); };
+  const saveSong = () => { if (onSaveSong) onSaveSong({ id: songKey, title: song.title, artist: song.artist, musicUrl: song.link, placeName: "" }); };
+  async function handleShare() {
+    const name = [song.title, song.artist].filter(Boolean).join(" — ");
+    const r = await shareLink({ title: name || "Song of the Day", text: `🎵 ${name}\n${t("content.song.shareText")}`, url: href });
+    if ((r === "shared" || r === "copied") && onEvent) onEvent("share", { type: "song", method: r });
+    if (r === "copied") { setShareCopied(true); setTimeout(() => setShareCopied(false), 2200); }
+  }
+  const stop = (fn) => (e) => { e.stopPropagation(); fn(); };
   return (
-    <section className={`content-card content-song ${parsed ? "content-song-playable" : ""}`} aria-label={t("content.song.kicker")}
+    <section className={`content-card content-song ${parsed ? "content-song-playable" : ""} ${art ? "content-song-art" : ""}`} aria-label={t("content.song.kicker")}
+      style={art ? { "--sotd-art": `url("${art}")` } : undefined}
       onClick={parsed ? openPlayer : undefined}>
+      <div className="sotd-presents">THE VAN PRESENTS</div>
       <span className="content-kicker">♪ {t("content.song.kicker")}</span>
       <div className="content-title">{song.title}</div>
       {song.artist && <div className="content-artist">{song.artist}</div>}
@@ -154,9 +166,25 @@ export function SongOfTheDayCard() {
           {t("content.song.listen")} <span aria-hidden="true">→</span>
         </a>
       )}
+      <div className="sotd-tools">
+        {onSaveSong && (
+          <button type="button" className={`sotd-tool ${saved ? "sotd-tool-on" : ""}`} onClick={stop(saveSong)} aria-pressed={saved}
+            aria-label={saved ? t("content.song.saved") : t("content.song.save")} title={saved ? t("content.song.saved") : t("content.song.save")}>
+            <HeartIcon filled={saved} className="sotd-icon" />
+          </button>
+        )}
+        <button type="button" className="sotd-tool" onClick={stop(handleShare)} aria-label={t("content.song.share")} title={t("content.song.share")}>
+          <ShareIcon className="sotd-icon" />{shareCopied && <span className="sotd-tool-note">{t("share.copied")}</span>}
+        </button>
+        {parsed && (
+          <a className="sotd-source" href={song.link} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+            {parsed.kind === "spotify" ? t("content.song.openSpotify") : t("content.song.openYoutube")} <span aria-hidden="true">↗</span>
+          </a>
+        )}
+      </div>
       {open && parsed && (
         <SongPlayerSheet song={song} parsed={parsed} saved={saved} onClose={close} onEvent={onEvent} onPlayStart={onSongPlay}
-          onSave={() => { if (onSaveSong) onSaveSong({ id: songKey, title: song.title, artist: song.artist, musicUrl: song.link, placeName: "" }); }} />
+          onSave={saveSong} />
       )}
     </section>
   );
@@ -242,6 +270,34 @@ button.myvan-song-link { padding: 4px 6px; }
 .content-artist { font-size: 13.5px; color: var(--accent); font-weight: 600; }
 .content-note { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: rgba(242,241,236,0.82); }
 .content-song-playable { cursor: pointer; }
+.content-song { padding: 18px 18px 14px; gap: 6px; overflow: hidden; border-radius: 22px; }
+.content-song-art {
+  background:
+    linear-gradient(135deg, rgba(8,23,31,.94) 0%, rgba(8,23,31,.7) 50%, rgba(8,23,31,.9) 100%),
+    var(--sotd-art) center / cover no-repeat;
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+}
+.sotd-presents { font-size: 10px; font-weight: 700; letter-spacing: .22em; color: rgba(244,247,245,.6); margin-bottom: 2px; }
+.content-song .content-kicker { margin-bottom: 10px; }
+.content-song .content-title { font-size: 24px; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+.content-song .content-artist { font-size: 15px; margin-top: 2px; overflow-wrap: anywhere; }
+.content-song .content-note {
+  margin: 10px 0 2px; padding-left: 12px; border-left: 2px solid rgba(57,172,208,.7);
+  font-size: 13.5px; line-height: 1.55; font-style: italic; color: rgba(242,241,236,.88);
+}
+.content-song .content-cta {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 12px 24px; border-radius: 999px;
+  background: var(--accent); color: #05201f; font-size: 14.5px; font-weight: 800; box-shadow: 0 6px 18px rgba(57,172,208,.3);
+}
+.sotd-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.08); }
+.sotd-tool {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 40px; height: 40px; padding: 0 11px; justify-content: center;
+  border-radius: 999px; border: 1px solid rgba(255,255,255,.16); background: rgba(10,13,11,.45); color: var(--text-dim); cursor: pointer;
+}
+.sotd-icon { flex: none; }
+.sotd-tool-on { color: var(--accent); border-color: var(--accent); }
+.sotd-tool-note { font-size: 11.5px; font-weight: 700; color: var(--accent); }
+.sotd-source { margin-left: auto; font-size: 12.5px; font-weight: 600; color: var(--text-dim); text-decoration: none; padding: 10px 2px; }
 .content-cta-btn { background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; }
 .content-cta { margin-top: 8px; align-self: flex-start; font-size: 12.5px; font-weight: 700; color: var(--accent); text-decoration: none; }
 .poll-options { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
