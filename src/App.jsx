@@ -2133,7 +2133,7 @@ function PickRouteView() {
   );
 }
 
-// ---- POSTCARDS FROM THE ROAD 💌 (brief section 6) ----
+// ---- POSTCARDS FROM THE ROAD (brief section 6) ----
 // Real photo upload (not just a local preview) travels through the SAME
 // Apps Script webhook already used for Route Submissions (see
 // AppWebhookScript.gs.txt), routed by form_type:"postcard". The script saves
@@ -2349,7 +2349,7 @@ function PostcardsView() {
     return (
       <div className="view fade-in postcard-success">
         <div className="pc-success-card">
-          <div className="pc-stamp" aria-hidden="true">💌</div>
+          <div className="pc-stamp" aria-hidden="true"><PostcardIcon size={26} /></div>
           <div className="postcard-success-icon"><CheckCircle2 size={44} strokeWidth={1.6} /></div>
           <h1 className="page-title center">{t("pc.sent.title")}</h1>
           <p className="route-intro-text route-intro-text-center">{t("pc.sent.text")}</p>
@@ -2366,7 +2366,7 @@ function PostcardsView() {
       <div className="pc-hero">
         <img src={ROADBOOK_BG_05} alt="" className="pc-hero-img" />
       </div>
-      <div className="eyebrow">POSTCARDS FROM THE ROAD 💌</div>
+      <div className="eyebrow">POSTCARDS FROM THE ROAD <PostcardIcon size={14} className="eyebrow-postcard-icon" /></div>
       <h1 className="page-title">{t("pc.title")}</h1>
       <p className="route-intro-text">
         {t("pc.intro")}
@@ -2440,7 +2440,6 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
   const { t } = useLang();
   const [shareCopied, setShareCopied] = useState(false);
   const [imgBlob, setImgBlob] = useState(null);
-  const [imgNote, setImgNote] = useState("");
   const imgOk = entry.kind !== "route" && !!entry.id && !String(entry.id).startsWith("postcard-") && canShareImages();
   // Pre-render the share picture while the card is open, so the share tap can hand it straight to
   // the native sheet (browsers only allow sharing right after a tap).
@@ -2483,15 +2482,18 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
   // Only real submission ids make stable links (the "postcard-N" fallback ids are list positions).
   const canShare = !!entry.id && !String(entry.id).startsWith("postcard-");
   async function handleShare() {
-    const r = await shareLink({ title: entry.placeName ? `${entry.placeName} — The Van` : "The Van", text: t("share.postcardText"), url: postcardShareUrl(entry.id) });
+    const title = entry.placeName ? `${entry.placeName} — The Van` : "The Van";
+    const url = postcardShareUrl(entry.id);
+    // One button: where the device can share files and the picture is ready, share the postcard picture
+    // (link in the caption); otherwise (desktop, picture not drawable) share the plain link as before.
+    if (imgOk && imgBlob) {
+      const ri = await shareImage({ blob: imgBlob, filename: "the-van-postcard.png", title, text: t("share.postcardText"), url });
+      if (ri === "shared") { trackEvent("share", { type: "postcard", method: "image" }); return; }
+      if (ri === "cancelled") return;
+    }
+    const r = await shareLink({ title, text: t("share.postcardText"), url });
     if (r === "shared" || r === "copied") trackEvent("share", { type: "postcard", method: r });
     if (r === "copied") { setShareCopied(true); setTimeout(() => setShareCopied(false), 2200); }
-  }
-  async function handleShareImage() {
-    if (!imgBlob) { setImgNote(t("share.imageFail")); setTimeout(() => setImgNote(""), 3000); return; }
-    const r = await shareImage({ blob: imgBlob, filename: "the-van-postcard.png", title: entry.placeName ? `${entry.placeName} — The Van` : "The Van", text: t("share.postcardText"), url: postcardShareUrl(entry.id) });
-    if (r === "shared") trackEvent("share", { type: "postcard", method: "image" });
-    if (r === "failed") { setImgNote(t("share.imageFail")); setTimeout(() => setImgNote(""), 3000); }
   }
   const listenLink = entry.musicUrl ? (
     <SongPlayLink className="pcard-listen" song={{ id: `pc-${entry.id}`, title: entry.songTitle || entry.placeName || "", artist: entry.artist, link: entry.musicUrl }} heading="Van Atlas">
@@ -2532,16 +2534,12 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
         {canShare && (
           <button className="atlas-entry-save" onClick={handleShare}>{shareCopied ? t("share.copied") : t("share.button")}</button>
         )}
-        {canShare && imgOk && imgBlob && (
-          <button className="atlas-entry-save" onClick={handleShareImage}>{t("share.image")}</button>
-        )}
         <button
           className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
           onClick={() => onSavePostcard({ id: entry.id, placeName: entry.placeName, story: entry.story, photoUrl: entry.photoUrl, songTitle: entry.songTitle || "", artist: entry.artist || "", musicUrl: entry.musicUrl || "" })}
         >
           {saved ? t("atlas.inMyVan") : "+ My Van"}
         </button>
-        {imgNote && <div className="atlas-postcard-note">{imgNote}</div>}
       </div>
     </div>
   );
@@ -2714,7 +2712,7 @@ function VanAtlasView({ sharedPostcardId, sharedNonce, myVanSongs, myVanPostcard
       {status === "ready" && galleryPostcards.length > 0 && (
         <div className="atlas-view-toggle" role="tablist">
           <button type="button" role="tab" aria-selected={atlasView === "map"} className={atlasView === "map" ? "atlas-view-active" : ""} onClick={() => setAtlasView("map")}>🗺️ {t("atlas.view.map")}</button>
-          <button type="button" role="tab" aria-selected={atlasView === "grid"} className={atlasView === "grid" ? "atlas-view-active" : ""} onClick={() => { setAtlasView("grid"); setOpenedPostcard(null); }}><svg className="atlas-view-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true"><rect x="1.5" y="3" width="13" height="10" rx="1.5" /><rect x="9.2" y="5" width="3.3" height="3.8" rx=".4" /><path d="M3.8 6.2h3.6M3.8 8.4h3.6M3.8 10.4h6" strokeLinecap="round" /></svg> {t("atlas.view.postcards")}</button>
+          <button type="button" role="tab" aria-selected={atlasView === "grid"} className={atlasView === "grid" ? "atlas-view-active" : ""} onClick={() => { setAtlasView("grid"); setOpenedPostcard(null); }}><PostcardIcon size={15} className="atlas-view-icon" /> {t("atlas.view.postcards")}</button>
         </div>
       )}
 
@@ -2931,6 +2929,15 @@ function HomeHubView({ onNavigate }) {
 
 // Line-art outline of the brand Van (a split-window T2 bus with a roof rack), drawn in the same
 // stroke style as the other tab icons (lucide: 24x24, round caps, currentColor).
+// The app's postcard mark (replaces the old 💌 emoji everywhere).
+function PostcardIcon({ size = 16, className = "" }) {
+  return (
+    <svg className={`postcard-icon ${className}`.trim()} width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
+      <rect x="1.5" y="3" width="13" height="10" rx="1.5" /><rect x="9.2" y="5" width="3.3" height="3.8" rx=".4" /><path d="M3.8 6.2h3.6M3.8 8.4h3.6M3.8 10.4h6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function VanOutlineIcon({ size = 21, strokeWidth = 1.8 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="tab-van-outline">
@@ -4285,7 +4292,7 @@ const CSS = `
 }
 .pc-stamp {
   position: absolute; top: -18px; right: 16px; width: 44px; height: 52px; display: flex; align-items: center; justify-content: center;
-  background: var(--surface-2); border: 2px dashed var(--accent); border-radius: 4px; font-size: 22px; transform: rotate(4deg);
+  background: var(--surface-2); border: 2px dashed var(--accent); border-radius: 4px; color: var(--accent); transform: rotate(4deg);
 }
 
 /* Postcards from the Road: presentation only */
@@ -4323,6 +4330,7 @@ const CSS = `
   font-size: 13px; font-weight: 700; cursor: pointer; min-height: 40px;
 }
 .atlas-view-toggle .atlas-view-icon { vertical-align: -2px; margin-right: 2px; }
+.eyebrow .eyebrow-postcard-icon { vertical-align: -2px; margin-left: 3px; }
 .atlas-view-toggle .atlas-view-active { background: rgba(57,172,208,.16); color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .atlas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
 .atlas-tile {
@@ -4378,7 +4386,6 @@ const CSS = `
 .pcard .pcard-listen-wrap { clear: both; margin: 0 0 10px; }
 .pcard .pcard-song .pcard-listen { display: flex; padding-top: 10px; border-top: 1px solid rgba(42,38,32,.1); width: 100%; }
 .atlas-postcard-actions { justify-content: flex-end; flex-wrap: wrap; }
-.atlas-postcard-note { flex: 1 0 100%; text-align: right; font-size: 12px; color: var(--muted, #9aa6ab); }
 .pcard .pcard-sign { clear: both; font-size: 14px; font-style: italic; color: #2C86A6; text-align: right; margin: 6px 0 0; }
 
 .myvan-tabs { display: flex; gap: 6px; margin-bottom: 16px; }

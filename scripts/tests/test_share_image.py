@@ -1,5 +1,5 @@
-"""Share postcard as an image: native share gets a PNG file (+ link in caption); the link share
-button is unchanged; no file-sharing support or undrawable photo -> no image button. Local harness."""
+"""Share postcard: ONE button. With file-share support it shares the PNG (+ link in caption);
+otherwise (or if the photo cannot be drawn) it shares the plain link. Local harness."""
 import json, sys, io, base64
 from playwright.sync_api import sync_playwright
 from PIL import Image
@@ -42,30 +42,32 @@ with sync_playwright() as p:
     for w in (390, 320):
         ctx, pg = open_card(b, [pc(1)], w=w)
         btns = pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").all_inner_texts()
-        check(btns == ["Μοιράσου", "Ως εικόνα", "+ My Van"], f"{w}px actions: link share + image share + My Van %s" % btns)
+        check(btns == ["Μοιράσου", "+ My Van"], f"{w}px actions: ONE share button + My Van %s" % btns)
         check(pg.evaluate("document.documentElement.scrollWidth-innerWidth") <= 0, f"{w}px no horizontal overflow")
-        pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").nth(0).click(); pg.wait_for_timeout(300)
-        c = pg.evaluate("window.__calls"); check(len(c) == 1 and c[0]["files"] == [] and c[0]["url"].endswith("/postcard/id-1"), "link button unchanged: shares only the link")
-        pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").nth(1).click(); pg.wait_for_timeout(800)
-        c = pg.evaluate("window.__calls"); check(len(c) == 2 and len(c[1]["files"]) == 1, "image button shares exactly one file")
-        if len(c) == 2 and c[1]["files"]:
-            f = c[1]["files"][0]; check(f["type"] == "image/png" and f["name"].endswith(".png") and f["size"] > 20000, "PNG file: %s %s" % (f["type"], f["size"]))
-            check("/postcard/id-1" in c[1]["text"], "caption carries the postcard link")
+        pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").nth(0).click(); pg.wait_for_timeout(900)
+        c = pg.evaluate("window.__calls"); check(len(c) == 1 and len(c[0]["files"]) == 1, "the single share button shares the picture")
+        if len(c) == 1 and c[0]["files"]:
+            f = c[0]["files"][0]; check(f["type"] == "image/png" and f["name"].endswith(".png") and f["size"] > 20000, "PNG file: %s %s" % (f["type"], f["size"]))
+            check("/postcard/id-1" in c[0]["text"], "caption carries the postcard link")
             raw = base64.b64decode(f["data"].split(",", 1)[1]); im = Image.open(io.BytesIO(raw)); check(im.size == (1080, 1350), "image is 1080x1350: %s" % (im.size,))
             if w == 390: im.save("share_card.png")
         check(not pg.errs, "no page errors " + str(pg.errs)); ctx.close()
     # card without a photo or song still renders; no song fields
     ctx, pg = open_card(b, [pc(2, photoUrl="", songTitle="", artist="", musicUrl="", story="Σύντομη ιστορία")])
-    pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").nth(1).click(); pg.wait_for_timeout(800)
+    pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").nth(0).click(); pg.wait_for_timeout(900)
     c = pg.evaluate("window.__calls"); check(len(c) == 1 and len(c[0]["files"]) == 1, "no photo / no song: image still produced")
     if c and c[0]["files"]: Image.open(io.BytesIO(base64.b64decode(c[0]["files"][0]["data"].split(",", 1)[1]))).save("share_card_min.png")
     ctx.close()
-    # browser without file sharing -> no image button, link share intact
+    # browser without file sharing -> same single button shares the plain link
     ctx, pg = open_card(b, [pc(1)], share=False)
-    check(pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").all_inner_texts() == ["Μοιράσου", "+ My Van"], "no file-share support -> no image button")
+    check(pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").all_inner_texts() == ["Μοιράσου", "+ My Van"], "no file-share support -> still one share button")
+    pg.evaluate("window.__calls=[];navigator.share=async(d)=>{window.__calls.push({url:d.url,files:d.files||[]})};0")
+    pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").nth(0).click(); pg.wait_for_timeout(400)
+    c = pg.evaluate("window.__calls"); check(len(c) == 1 and c[0]["files"] == [] and c[0]["url"].endswith("/postcard/id-1"), "falls back to sharing the link")
     ctx.close()
-    # photo that cannot be drawn (cross-origin, no CORS) -> no image button
+    # photo that cannot be drawn (cross-origin, no CORS) -> link share
     ctx, pg = open_card(b, [pc(1, photoUrl="https://img.example.com/x.jpg")])
-    check("Ως εικόνα" not in pg.locator(".atlas-opened .atlas-postcard-actions").inner_text(), "undrawable photo -> no image button (link share only)")
+    pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").nth(0).click(); pg.wait_for_timeout(400)
+    c = pg.evaluate("window.__calls"); check(len(c) == 1 and c[0]["files"] == [] and c[0]["url"].endswith("/postcard/id-1"), "undrawable photo -> link shared")
     ctx.close(); b.close()
 print("FAILS", fails) if fails else print("ALL PASS"); sys.exit(1 if fails else 0)
