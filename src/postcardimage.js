@@ -182,13 +182,11 @@ export async function renderPostcardImage(entry, labels) {
       ctx.fillText(fit(ctx, `— ${entry.displayName}`, IW, 34, 500, SANS, 22), IX + IW, y + 36); ctx.textAlign = "left";
     }
 
-    // ---- footer ----
-    ctx.textAlign = "center"; ctx.fillStyle = "#ffffff"; ctx.font = `800 36px ${HEAD}`;
-    if ("letterSpacing" in ctx) ctx.letterSpacing = "6px";
-    ctx.fillText("THE VAN", W / 2, 1288);
-    if ("letterSpacing" in ctx) ctx.letterSpacing = "1px";
-    ctx.fillStyle = "rgba(255,255,255,.62)"; ctx.font = `500 24px ${SANS}`;
-    ctx.fillText("Radio on Wheels · the-van-radio.vercel.app", W / 2, 1324);
+    // ---- footer: discreet brand line under the card ----
+    ctx.textAlign = "center"; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = `600 28px ${SANS}`;
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
+    ctx.fillText("The Van Web App", W / 2, 1298);
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
 
     return await new Promise((resolve) => { try { canvas.toBlob((b) => resolve(b || null), "image/png"); } catch (e) { resolve(null); } });
   } catch (e) {
