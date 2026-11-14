@@ -1039,7 +1039,6 @@ function projectLatLon(lat, lon) {
 
 const ROUTE_GENRES = ["Έντεχνο", "Rock", "Pop", "Λαϊκό", "Rap", "Άλλο", "🎲 Άσε το Van να αποφασίσει"];
 const ROUTE_STEP_LABELS = ["ΠΡΟΟΡΙΣΜΟΣ", "ΜΟΥΣΙΚΗ", "ΤΡΑΓΟΥΔΙ", "ΔΙΑΔΡΟΜΗ"];
-const ROUTE_STEP_INDEX = { destination: 0, genre: 1, song: 2, preview: 3 };
 const ROUTE_COOLDOWN_MS = 5 * 60 * 1000;
 // TODO: paste your OpenRouteService API key here (openrouteservice.org → sign up → dashboard → create token).
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjYzY2QyYzFkY2VkNjRkNGRhODJhYzNhNzFiNzE5NGY1IiwiaCI6Im11cm11cjY0In0=";
@@ -1338,6 +1337,17 @@ function makeVanIcon(facingEast) {
     iconSize: [1, 1],
     iconAnchor: [0, 0],
   });
+}
+
+// Non-interactive map of Greece shown on the Pick the Route form until a destination is chosen.
+function RouteGreecePreview() {
+  return (
+    <div className="route-leaflet-wrap">
+      <MapContainer center={[38.6, 23.4]} zoom={6} scrollWheelZoom={false} dragging={false} doubleClickZoom={false} zoomControl={false} touchZoom={false} className="route-leaflet-map">
+        <TileLayer attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      </MapContainer>
+    </div>
+  );
 }
 
 function RouteLeafletJourneyMap({ destination, mode, vanPct, routeCoords, routeStatus }) {
@@ -1706,26 +1716,39 @@ function RouteMapBoard({ selected, onSelect, onFreePick, mode, vanPct }) {
   );
 }
 
-function RouteStepper({ step }) {
-  const { t } = useLang();
-  const idx = ROUTE_STEP_INDEX[step];
-  if (idx === undefined) return null;
+// Pick the Route form: one screen, a row per field. Tapping a row opens that field in a bottom sheet.
+function RouteSheet({ title, onClose, doneLabel, children }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
   return (
-    <div className="route-stepper" role="progressbar" aria-valuemin={1} aria-valuemax={ROUTE_STEP_LABELS.length} aria-valuenow={idx + 1}>
-      <div className="route-progress">
-        {ROUTE_STEP_LABELS.map((_l, i) => (
-          <span key={i} className={`route-progress-seg ${i === idx ? "route-progress-active" : i < idx ? "route-progress-done" : ""}`} />
-        ))}
-      </div>
-      <div className="route-step-names">
-        {ROUTE_STEP_LABELS.map((_l, i) => (
-          <span key={i} className={`route-step ${i === idx ? "route-step-active" : i < idx ? "route-step-done" : ""}`}>
-            {String(i + 1).padStart(2, "0")} {t("route.step." + i)}
-          </span>
-        ))}
+    <div className="route-sheet-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="route-sheet" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="route-sheet-grab" aria-hidden="true" />
+        <div className="route-sheet-head">
+          <div className="route-sheet-title">{title}</div>
+          <button type="button" className="route-sheet-close" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="route-sheet-body">{children}</div>
+        <div className="route-sheet-foot"><button type="button" className="pill-btn route-sheet-done" onClick={onClose}>{doneLabel}</button></div>
       </div>
     </div>
   );
+}
+
+const ROUTE_ROW_ICONS = {
+  destination: <><path d="M12 21s-6.5-6.1-6.5-11a6.5 6.5 0 0 1 13 0c0 4.9-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.4" /></>,
+  genre: <><path d="M9 18V6l10-2v12" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="16.5" cy="16" r="2.5" /></>,
+  song: <><path d="M9 18V5l11-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="17" cy="16" r="3" /></>,
+  link: <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></>,
+  story: <><path d="M4 5h16v11H9l-5 4z" /><path d="M8.5 10h7M8.5 13h4" /></>,
+  name: <><circle cx="12" cy="8" r="3.6" /><path d="M5 20c.8-4 3.5-6 7-6s6.2 2 7 6" /></>,
+};
+function RouteRowIcon({ name }) {
+  return <svg className="route-row-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ROUTE_ROW_ICONS[name]}</svg>;
 }
 
 // Stages where the van (or ferry) icon animates along a leg, and what
@@ -1759,6 +1782,8 @@ function PickRouteView() {
   const { t, pn, lang } = useLang();
   const genreLabel = (g) => (g === ROUTE_GENRES[ROUTE_GENRES.length - 1] ? t("genre.decide") : (lang === "en" && (("genre." + g) in DICT.en)) ? t("genre." + g) : g);
   const [step, setStep] = useState("intro");
+  const [editing, setEditing] = useState(null); // which row's sheet is open: destination | genre | song | link | story | name
+  const [showMissing, setShowMissing] = useState(false);
   const [destination, setDestination] = useState(null);
   const [genre, setGenre] = useState(null);
   const [userName, setUserName] = useState("");
@@ -1878,6 +1903,8 @@ function PickRouteView() {
 
   function reset() {
     setStep("intro");
+    setEditing(null);
+    setShowMissing(false);
     setDestination(null);
     setGenre(null);
     setUserName("");
@@ -1961,14 +1988,76 @@ function PickRouteView() {
               <li key={i}><span className="route-hero-num">{i + 1}</span>{t("route.step." + i)}</li>
             ))}
           </ol>
-          <button className="pill-btn route-launch-btn" onClick={() => setStep("destination")}>{t("route.start")}</button>
+          <button className="pill-btn route-launch-btn" onClick={() => setStep("form")}>{t("route.start")}</button>
         </div>
       )}
 
-      {step === "destination" && (
-        <div className="fade-in">
-          <RouteStepper step={step} />
-          <div className="route-step-heading">{t("route.where")}</div>
+      {step === "form" && (
+        <div className="fade-in route-rows-view">
+          <div className="eyebrow">PICK THE ROUTE 🚐</div>
+          <h1 className="page-title route-rows-title">{t("route.title")}</h1>
+          <div className="route-rows-map">
+            {destination ? (
+              ferryInfo ? (
+                <RouteLeafletFerryMap
+                  legs={ferryLegs}
+                  activeLegIndex={0}
+                  vanPct={null}
+                  badge={t("route.ferryBadge", { dep: pn(ferryInfo.departurePort.name), arr: lang === "en" ? placeLabel("en", ferryInfo.islandName) + " port" : ferryInfo.arrivalPort.name, dest: pn(destination.name) })}
+                />
+              ) : (
+                <RouteLeafletJourneyMap destination={destination} mode="preview" vanPct={0} routeCoords={routeCoords} routeStatus={routeStatus} />
+              )
+            ) : (
+              <RouteGreecePreview />
+            )}
+            <button type="button" className="route-rows-map-tap" onClick={() => setEditing("destination")} aria-label={t("route.row.dest")} />
+          </div>
+          <div className="route-rows">
+            {[
+              { key: "destination", icon: "destination", ph: t("route.row.dest"), value: destination ? (destination.resolving ? t("route.locating") : pn(destination.name)) : "", missing: !destination },
+              { key: "genre", icon: "genre", ph: t("route.row.genre"), value: genre ? genreLabel(genre) : "", missing: !genre },
+              { key: "song", icon: "song", ph: t("route.row.song"), value: [songTitle.trim(), artist.trim()].filter(Boolean).join(" — "), missing: !(songTitle.trim() && artist.trim()) },
+              { key: "link", icon: "link", ph: t("route.row.link"), value: musicUrl.trim(), missing: false },
+              { key: "story", icon: "story", ph: t("route.row.story"), value: story.trim(), missing: false },
+              { key: "name", icon: "name", ph: t("route.row.name"), value: userName.trim(), missing: !userName.trim() },
+            ].map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                data-row={r.key}
+                className={`route-row ${r.value ? "route-row-filled" : ""} ${showMissing && r.missing ? "route-row-missing" : ""}`}
+                onClick={() => setEditing(r.key)}
+              >
+                <RouteRowIcon name={r.icon} />
+                <span className="route-row-text">{r.value || r.ph}</span>
+                <svg className="route-row-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+              </button>
+            ))}
+          </div>
+          {showMissing && !canProceedSong && <div className="route-blocked-msg">{t("route.missing")}</div>}
+          {blockedMsg && <div className="route-blocked-msg">{blockedMsg}</div>}
+          <button
+            type="button"
+            className="route-send-btn"
+            onClick={() => {
+              if (!canProceedSong) {
+                setShowMissing(true);
+                setTimeout(() => { const el = document.querySelector(".route-row-missing"); if (el && el.scrollIntoView) el.scrollIntoView({ block: "center", behavior: "smooth" }); }, 50);
+                return;
+              }
+              launch();
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 3L3 10.5l7 3 3 7z" /><path d="M21 3l-11 10.5" /></svg>
+            {t("route.send")}
+          </button>
+          <p className="route-intro-text route-intro-text-center">{t("route.starting")}</p>
+        </div>
+      )}
+
+      {step === "form" && editing === "destination" && (
+        <RouteSheet title={t("route.where")} onClose={() => setEditing(null)} doneLabel={t("route.done")}>
           <p className="route-intro-text">{t("route.whereText")}</p>
           <RouteMapWithSearch selected={destination} onSelect={setDestination} onFreePick={handleFreePick} onSearchPick={(p) => setDestination({ name: p.name, lat: p.lat, lon: p.lon })} />
           {destination && (
@@ -1978,89 +2067,54 @@ function PickRouteView() {
               {getFerryInfo(destination) && <><br /><span>{t("route.hasFerry")}</span></>}
             </div>
           )}
-          <div className="route-nav">
-            <button className="pill-btn" disabled={!destination} onClick={() => setStep("genre")}>{t("route.continue")}</button>
-          </div>
-        </div>
+        </RouteSheet>
       )}
 
-      {step === "genre" && (
-        <div className="fade-in">
-          <RouteStepper step={step} />
-          <div className="route-step-heading">{t("route.genreHeading")}</div>
+      {step === "form" && editing === "genre" && (
+        <RouteSheet title={t("route.genreHeading")} onClose={() => setEditing(null)} doneLabel={t("route.done")}>
           <div className="route-genre-grid">
             {ROUTE_GENRES.map((g) => (
-              <button
-                key={g}
-                className={`route-genre-card ${genre === g ? "route-genre-active" : ""}`}
-                onClick={() => setGenre(g)}
-              >
+              <button key={g} className={`route-genre-card ${genre === g ? "route-genre-active" : ""}`} onClick={() => { setGenre(g); setEditing(null); }}>
                 {genreLabel(g)}
               </button>
             ))}
           </div>
-          <div className="route-nav">
-            <button className="pill-btn pill-btn-ghost" onClick={() => setStep("destination")}>{t("route.back")}</button>
-            <button className="pill-btn" disabled={!genre} onClick={() => setStep("song")}>{t("route.continue")}</button>
-          </div>
-        </div>
+        </RouteSheet>
       )}
 
-      {step === "song" && (
-        <div className="fade-in">
-          <RouteStepper step={step} />
-          <div className="route-step-heading">{t("route.songHeading")}</div>
-          <div className="route-form-card">
-            <label className="route-field-label">{t("route.nameLabel")}</label>
-            <input className="route-input" placeholder={t("route.namePh")} value={userName} onChange={(e) => setUserName(e.target.value)} maxLength={60} />
-          </div>
+      {step === "form" && editing === "song" && (
+        <RouteSheet title={t("route.songHeading")} onClose={() => setEditing(null)} doneLabel={t("route.done")}>
           <div className="route-form-card route-form-card-song">
             <p className="route-form-ask">{t("route.songAsk")}</p>
-            <input className="route-input" placeholder={t("route.songTitlePh")} value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
+            <input className="route-input" autoFocus placeholder={t("route.songTitlePh")} value={songTitle} onChange={(e) => setSongTitle(e.target.value)} maxLength={80} />
             <input className="route-input" placeholder={t("route.artistPh")} value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={80} />
-            <input className="route-input" placeholder={t("route.linkPh")} value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
           </div>
-          <div className="route-form-card">
-            <div className="route-step-heading route-step-heading-sm route-step-heading-flush">{t("route.whySong")}</div>
-            <textarea className="route-textarea" placeholder={t("route.storyPh")} value={story} onChange={(e) => setStory(e.target.value)} maxLength={500} />
-          </div>
-          <div className="route-nav">
-            <button className="pill-btn pill-btn-ghost" onClick={() => setStep("genre")}>{t("route.back")}</button>
-            <button className="pill-btn" disabled={!canProceedSong} onClick={() => setStep("preview")}>{t("route.continue")}</button>
-          </div>
-        </div>
+        </RouteSheet>
       )}
 
-      {step === "preview" && (
-        <div className="fade-in">
-          <RouteStepper step={step} />
-          <div className="route-step-heading">{t("route.yourRoute")}</div>
-          {ferryInfo ? (
-            <>
-              <RouteLeafletFerryMap
-                legs={ferryLegs}
-                activeLegIndex={0}
-                vanPct={null}
-                badge={t("route.ferryBadge", { dep: pn(ferryInfo.departurePort.name), arr: lang === "en" ? placeLabel("en", ferryInfo.islandName) + " port" : ferryInfo.arrivalPort.name, dest: pn(destination.name) })}
-              />
-              <p className="route-ferry-note">{t("route.ferryNote")}</p>
-            </>
-          ) : (
-            <RouteLeafletJourneyMap destination={destination} mode="preview" vanPct={0} routeCoords={routeCoords} routeStatus={routeStatus} />
-          )}
-          <div className="route-preview-card route-ticket">
-            <div><span>{t("route.sum.name")}</span> <strong>{userName.trim()}</strong></div>
-            <div><span>{t("route.sum.dest")}</span> <strong>{pn(destination.name)}</strong></div>
-            <div><span>{t("route.sum.genre")}</span> <strong>{genreLabel(genre)}</strong></div>
-            <div><span>{t("route.sum.song")}</span> <strong>{songTitle} — {artist}</strong></div>
+      {step === "form" && editing === "link" && (
+        <RouteSheet title={t("route.row.link")} onClose={() => setEditing(null)} doneLabel={t("route.done")}>
+          <div className="route-form-card">
+            <input className="route-input" autoFocus placeholder={t("route.linkPh")} value={musicUrl} onChange={(e) => setMusicUrl(e.target.value)} maxLength={300} />
           </div>
-          {blockedMsg && <div className="route-blocked-msg">{blockedMsg}</div>}
-          <div className="route-nav route-nav-center">
-            <button className="pill-btn pill-btn-ghost" onClick={() => setStep("song")}>{t("route.back")}</button>
-            <button className="pill-btn route-launch-btn" onClick={launch}>{t("route.go")}</button>
+        </RouteSheet>
+      )}
+
+      {step === "form" && editing === "story" && (
+        <RouteSheet title={t("route.whySong")} onClose={() => setEditing(null)} doneLabel={t("route.done")}>
+          <div className="route-form-card">
+            <textarea className="route-textarea" autoFocus placeholder={t("route.storyPh")} value={story} onChange={(e) => setStory(e.target.value)} maxLength={500} />
           </div>
-          <p className="route-intro-text route-intro-text-center">{t("route.starting")}</p>
-        </div>
+        </RouteSheet>
+      )}
+
+      {step === "form" && editing === "name" && (
+        <RouteSheet title={t("route.row.name")} onClose={() => setEditing(null)} doneLabel={t("route.done")}>
+          <div className="route-form-card">
+            <label className="route-field-label">{t("route.nameLabel")}</label>
+            <input className="route-input" autoFocus placeholder={t("route.namePh")} value={userName} onChange={(e) => setUserName(e.target.value)} maxLength={60} />
+          </div>
+        </RouteSheet>
       )}
 
       {step === "driving" && (
@@ -3940,20 +3994,6 @@ const CSS = `
   padding: 12px 22px; border-radius: 999px; cursor: pointer;
 }
 .pill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.route-stepper { margin-bottom: 20px; }
-.route-progress { display: flex; gap: 6px; margin-bottom: 8px; }
-.route-progress-seg { flex: 1; height: 4px; border-radius: 4px; background: var(--border); transition: background .3s; }
-.route-progress-done { background: var(--accent-dim); }
-.route-progress-active { background: var(--accent); box-shadow: 0 0 8px rgba(57,172,208,.55); }
-.route-step-names {
-  display: flex; justify-content: space-between; gap: 4px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.03em; color: var(--text-dim2);
-}
-.route-step-names .route-step { flex: 1; min-width: 0; white-space: nowrap; }
-.route-step-names .route-step:last-child { text-align: right; }
-.route-step-names .route-step:not(:first-child):not(:last-child) { text-align: center; }
-.route-step-active { color: var(--accent); }
-.route-step-done { color: var(--text-dim); }
 
 .route-hero { padding-top: 6px; }
 .route-hero-road {
@@ -3984,9 +4024,46 @@ const CSS = `
 .route-form-card .route-textarea { margin-top: 0; margin-bottom: 10px; }
 .route-form-card .route-field-label { display: block; margin: 0 0 8px; padding: 0; }
 .route-form-card .route-step-heading { margin-bottom: 10px; }
-@media (max-width: 360px) { .route-step-names { font-size: 8.5px; letter-spacing: 0; } .route-hero-steps li { font-size: 8.5px; } }
+@media (max-width: 360px) { .route-hero-steps li { font-size: 8.5px; } }
 .route-form-ask { font-size: 14px; line-height: 1.5; color: var(--text); margin: 0 0 12px; font-weight: 600; }
 .route-form-card .route-step-heading-flush { margin-top: 0; }
+/* Pick the Route: one screen, a row per field + bottom sheets */
+.route-rows-title { margin-bottom: 14px; }
+.route-rows-map { position: relative; z-index: 0; margin: 0 0 14px; border-radius: 18px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); }
+.route-rows-map .route-leaflet-wrap, .route-rows-map .route-board { margin: 0; border: 0; border-radius: 0; }
+.route-rows-map .route-leaflet-wrap { height: 250px; }
+.route-rows-map .route-board { aspect-ratio: 16 / 10; }
+.route-rows-map-tap { position: absolute; inset: 0; z-index: 500; background: transparent; border: 0; cursor: pointer; }
+.route-rows { display: flex; flex-direction: column; gap: 10px; margin: 0 0 16px; }
+.route-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 54px; padding: 12px 14px; text-align: left;
+  background: linear-gradient(180deg, rgba(57,172,208,.10), rgba(57,172,208,.04)); border: 1px solid rgba(57,172,208,.28); border-radius: 16px;
+  color: var(--text-dim); font: inherit; font-size: 15px; cursor: pointer;
+}
+.route-row:active { transform: scale(.99); }
+.route-row-icon { flex: none; color: var(--accent); }
+.route-row-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route-row-chev { flex: none; color: var(--text-dim); }
+.route-row-filled { color: var(--text); border-color: rgba(57,172,208,.55); }
+.route-row-filled .route-row-text { font-weight: 600; }
+.route-row-missing { border-color: #e5645a; box-shadow: 0 0 0 1px #e5645a inset; }
+.route-send-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 58px; padding: 14px 18px; margin: 0 0 10px;
+  background: #F5B82E; color: #1d1700; border: 0; border-radius: 999px; font-family: 'Poppins', sans-serif; font-size: 17px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 8px 22px rgba(245,184,46,.28);
+}
+.route-send-btn:active { transform: scale(.985); }
+.route-sheet-backdrop { position: fixed; inset: 0; z-index: 400; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,.62); animation: routeSheetFade .18s ease; }
+.route-sheet { width: 100%; max-width: 520px; max-height: 90vh; display: flex; flex-direction: column; background: var(--surface-2); border: 1px solid var(--border); border-bottom: 0; border-radius: 24px 24px 0 0; animation: routeSheetUp .24s ease; }
+.route-sheet-grab { width: 38px; height: 4px; border-radius: 4px; background: var(--border); margin: 8px auto 0; }
+.route-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px 6px; }
+.route-sheet-title { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 14px; letter-spacing: .04em; color: var(--accent); }
+.route-sheet-close { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 22px; line-height: 1; cursor: pointer; }
+.route-sheet-body { flex: 1; overflow-y: auto; padding: 4px 16px 10px; -webkit-overflow-scrolling: touch; }
+.route-sheet-foot { padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); }
+.route-sheet-done { width: 100%; }
+@keyframes routeSheetUp { from { transform: translateY(40px); opacity: .6; } to { transform: none; opacity: 1; } }
+@keyframes routeSheetFade { from { opacity: 0; } to { opacity: 1; } }
 .route-ticket { position: relative; border-style: dashed; border-width: 1.5px; border-color: var(--accent-dim); background: linear-gradient(180deg, rgba(57,172,208,.08), var(--surface)); }
 .route-ticket > div { display: flex; flex-direction: column; line-height: 1.4; padding: 6px 0; }
 .route-ticket > div + div { border-top: 1px solid var(--border); }
