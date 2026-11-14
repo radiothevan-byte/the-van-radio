@@ -1,0 +1,4 @@
+node_modules
+dist
+# screenshots written by the local test scripts
+scripts/tests/*.png

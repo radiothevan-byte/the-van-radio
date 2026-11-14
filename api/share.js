@@ -95,7 +95,10 @@ export async function postcardMeta(id, origin) {
   return {
     title: place ? `Καρτ ποστάλ από ${place} · ${SITE}` : `Καρτ ποστάλ · ${SITE}`,
     description: clip(p.story, 180) || DEFAULT_DESC,
-    image: httpsUrl(p.photoUrl) || `${origin}/og-default.png`,
+    // the rendered postcard (photo + place + story + song + signature); /api/og falls back to the default image on any error
+    image: `${origin}/api/og?id=${encodeURIComponent(String(p.id))}`,
+    imageWidth: 1200,
+    imageHeight: 630,
     type: "article",
   };
 }
@@ -113,6 +116,7 @@ export function metaTags(meta, url, origin) {
     `<meta property="og:description" content="${e(m.description)}" />`,
     `<meta property="og:url" content="${e(url)}" />`,
     `<meta property="og:image" content="${e(m.image)}" />`,
+    ...(m.imageWidth ? [`<meta property="og:image:width" content="${m.imageWidth}" />`, `<meta property="og:image:height" content="${m.imageHeight}" />`] : []),
     `<meta name="twitter:card" content="summary_large_image" />`,
     `<meta name="twitter:title" content="${e(m.title)}" />`,
     `<meta name="twitter:description" content="${e(m.description)}" />`,
