@@ -24,7 +24,7 @@ with sync_playwright() as p:
         pg.goto(BASE + "/"); pg.wait_for_selector(".content-song"); pg.wait_for_timeout(600)
         check(pg.locator(".tab-btn").count() == 4 and [x.strip() for x in pg.locator(".tab-label").all_inner_texts()] == ["Home", "Journeys", "My Van", "About"], f"{name}: main nav Home/Journeys/My Van/About unchanged")
         check(pg.locator(".content-song").count() == 1 and ov(pg) <= 0, f"{name}: Home with the redesigned Song of the Day, no overflow")
-        for sel, path, probe in ((".hub-card-atlas", "/atlas", ".atlas-view-toggle"), (".hub-card-half >> nth=0", "/route", ".route-hero"), (".hub-card-half >> nth=1", "/postcards", ".pc-form")):
+        for sel, path, probe in ((".hub-card-atlas", "/atlas", ".atlas-view-toggle"), (".hub-card-half >> nth=0", "/route", ".route-rows-view"), (".hub-card-half >> nth=1", "/postcards", ".pc-form")):
             pg.goto(BASE + "/"); pg.wait_for_selector(".hub-card"); pg.locator(sel).click(); pg.wait_for_timeout(1000)
             check(pg.evaluate("location.pathname") == path and pg.locator(probe).count() >= 1, f"{name}: Home -> {path} shows the redesigned screen")
             check(ov(pg) <= 0, f"{name}: {path} no horizontal overflow")
@@ -36,7 +36,7 @@ with sync_playwright() as p:
         # Roadbook entry points still lead into Route / Postcards
         pg.goto(BASE + "/roadbook"); pg.wait_for_timeout(500); pg.locator(".roadbook-dot").last.click(); pg.wait_for_timeout(900)
         pg.locator(".roadbook-cta-row .pill-btn").first.click(); pg.wait_for_selector(".roadbook-choice-card"); pg.locator(".roadbook-choice-card .roadbook-hub-btn").nth(0).click(); pg.wait_for_timeout(500)
-        check(pg.evaluate("location.pathname") == "/route" and pg.locator(".route-hero").count() == 1, f"{name}: Roadbook -> Pick the Route")
+        check(pg.evaluate("location.pathname") == "/route" and pg.locator(".route-rows-view").count() == 1, f"{name}: Roadbook -> Pick the Route")
         check(not errs, f"{name}: no page errors {errs[:1]}"); ctx.close()
     b.close()
 print("FAILS", fails) if fails else print("ALL PASS"); sys.exit(1 if fails else 0)

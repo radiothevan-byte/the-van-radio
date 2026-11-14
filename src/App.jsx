@@ -1038,7 +1038,6 @@ function projectLatLon(lat, lon) {
 }
 
 const ROUTE_GENRES = ["Έντεχνο", "Rock", "Pop", "Λαϊκό", "Rap", "Άλλο", "🎲 Άσε το Van να αποφασίσει"];
-const ROUTE_STEP_LABELS = ["ΠΡΟΟΡΙΣΜΟΣ", "ΜΟΥΣΙΚΗ", "ΤΡΑΓΟΥΔΙ", "ΔΙΑΔΡΟΜΗ"];
 const ROUTE_COOLDOWN_MS = 5 * 60 * 1000;
 // TODO: paste your OpenRouteService API key here (openrouteservice.org → sign up → dashboard → create token).
 const ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjYzY2QyYzFkY2VkNjRkNGRhODJhYzNhNzFiNzE5NGY1IiwiaCI6Im11cm11cjY0In0=";
@@ -1781,7 +1780,7 @@ function prefersReducedMotion() {
 function PickRouteView() {
   const { t, pn, lang } = useLang();
   const genreLabel = (g) => (g === ROUTE_GENRES[ROUTE_GENRES.length - 1] ? t("genre.decide") : (lang === "en" && (("genre." + g) in DICT.en)) ? t("genre." + g) : g);
-  const [step, setStep] = useState("intro");
+  const [step, setStep] = useState("form");
   const [editing, setEditing] = useState(null); // which row's sheet is open: destination | genre | song | link | story | name
   const [showMissing, setShowMissing] = useState(false);
   const [destination, setDestination] = useState(null);
@@ -1902,7 +1901,7 @@ function PickRouteView() {
   }
 
   function reset() {
-    setStep("intro");
+    setStep("form");
     setEditing(null);
     setShowMissing(false);
     setDestination(null);
@@ -1973,25 +1972,6 @@ function PickRouteView() {
 
   return (
     <div className="view">
-      {step === "intro" && (
-        <div className="route-intro route-hero fade-in">
-          <div className="route-hero-road" aria-hidden="true">
-            <img src={ROADBOOK_BG_01} alt="The Van" className="route-hero-van" />
-          </div>
-          <div className="eyebrow">PICK THE ROUTE 🚐</div>
-          <h1 className="page-title">{t("route.title")}</h1>
-          <p className="route-intro-text">
-            {t("route.intro")}
-          </p>
-          <ol className="route-hero-steps">
-            {ROUTE_STEP_LABELS.map((_l, i) => (
-              <li key={i}><span className="route-hero-num">{i + 1}</span>{t("route.step." + i)}</li>
-            ))}
-          </ol>
-          <button className="pill-btn route-launch-btn" onClick={() => setStep("form")}>{t("route.start")}</button>
-        </div>
-      )}
-
       {step === "form" && (
         <div className="fade-in route-rows-view">
           <div className="eyebrow">PICK THE ROUTE 🚐</div>
@@ -3995,28 +3975,6 @@ const CSS = `
 }
 .pill-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.route-hero { padding-top: 6px; }
-.route-hero-road {
-  position: relative; aspect-ratio: 16 / 10; margin: 0 -4px 16px; border-radius: 22px; overflow: hidden;
-  border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0,0,0,.45);
-  background: #0a0d0b;
-}
-.route-hero-van { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 55%; display: block; }
-.route-hero-road::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(180deg, rgba(10,13,11,0) 55%, rgba(10,13,11,.75) 100%);
-}
-.route-hero-steps {
-  list-style: none; margin: 0 0 22px; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
-}
-.route-hero-steps li {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  font-size: 9.5px; font-weight: 700; letter-spacing: .03em; color: var(--text-dim);
-}
-.route-hero-num {
-  width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--accent); color: var(--accent); font-size: 12px; background: rgba(57,172,208,.1);
-}
 .route-form-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
   padding: 14px 14px 4px; margin-bottom: 12px;
@@ -4024,7 +3982,6 @@ const CSS = `
 .route-form-card .route-textarea { margin-top: 0; margin-bottom: 10px; }
 .route-form-card .route-field-label { display: block; margin: 0 0 8px; padding: 0; }
 .route-form-card .route-step-heading { margin-bottom: 10px; }
-@media (max-width: 360px) { .route-hero-steps li { font-size: 8.5px; } }
 .route-form-ask { font-size: 14px; line-height: 1.5; color: var(--text); margin: 0 0 12px; font-weight: 600; }
 .route-form-card .route-step-heading-flush { margin-top: 0; }
 /* Pick the Route: one screen, a row per field + bottom sheets */
