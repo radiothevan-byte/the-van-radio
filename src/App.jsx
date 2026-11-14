@@ -1948,7 +1948,7 @@ function PickRouteView() {
       {step === "intro" && (
         <div className="route-intro route-hero fade-in">
           <div className="route-hero-road" aria-hidden="true">
-            <img src={VAN_B64} alt="The Van" className="route-hero-van" />
+            <img src={ROADBOOK_BG_01} alt="The Van" className="route-hero-van" />
           </div>
           <div className="eyebrow">PICK THE ROUTE 🚐</div>
           <h1 className="page-title">{t("route.title")}</h1>
@@ -3840,19 +3840,15 @@ const CSS = `
 .route-step-done { color: var(--text-dim); }
 
 .route-hero { padding-top: 6px; }
-.route-hero-road { position: relative; height: 170px; margin: 0 -4px 14px; }
-.route-hero-van {
-  position: absolute; z-index: 1; top: 0; left: 50%; transform: translateX(-50%);
-  width: 146px; height: 146px; object-fit: cover; display: block;
-  border-radius: 26px; border: 2px solid var(--accent-dim);
-  box-shadow: 0 10px 30px rgba(0,0,0,.55), 0 0 28px rgba(57,172,208,.22);
+.route-hero-road {
+  position: relative; aspect-ratio: 16 / 10; margin: 0 -4px 16px; border-radius: 22px; overflow: hidden;
+  border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0,0,0,.45);
+  background: #0a0d0b;
 }
-.route-hero-road::after {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 6px; height: 3px;
-  background: repeating-linear-gradient(90deg, rgba(244,247,245,.55) 0 18px, transparent 18px 34px);
-  opacity: .45;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+.route-hero-van { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 55%; display: block; }
+.route-hero-road::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(10,13,11,0) 55%, rgba(10,13,11,.75) 100%);
 }
 .route-hero-steps {
   list-style: none; margin: 0 0 22px; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
