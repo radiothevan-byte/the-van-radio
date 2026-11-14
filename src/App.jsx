@@ -4213,7 +4213,7 @@ const CSS = `
 }
 .postcard-preview-wrap { margin-bottom: 4px; }
 .postcard-preview-img {
-  display: block; width: 100%; max-height: 260px; object-fit: cover; border-radius: 4px;
+  display: block; width: 100%; height: auto; max-height: 60vh; object-fit: contain; border-radius: 2px;
 }
 .postcard-preview-actions { display: flex; gap: 8px; }
 .pill-btn-sm { font-size: 12px; padding: 7px 14px; }
@@ -4285,10 +4285,11 @@ const CSS = `
 .atlas-tile-place { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 13px; color: var(--text); overflow-wrap: anywhere; line-height: 1.25; }
 .atlas-tile-by { font-size: 11.5px; font-style: italic; color: var(--accent); margin-top: 2px; }
 .atlas-back-btn { background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 700; padding: 6px 0 10px; cursor: pointer; }
+.atlas-opened .atlas-postcard-place { display: block; }
 .atlas-opened { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 14px 16px 10px; margin-bottom: 14px; }
 .atlas-polaroid { background: #f3efe6; padding: 8px 8px 20px; border-radius: 4px; transform: rotate(-.8deg); box-shadow: 0 10px 24px rgba(0,0,0,.5); margin: 6px 2px 14px; }
-.atlas-polaroid .atlas-entry-photo { display: block; margin: 0; border-radius: 2px; max-height: 320px; }
-.atlas-postcard-place { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 16px; margin: 2px 0 6px; overflow-wrap: anywhere; }
+.atlas-polaroid .atlas-entry-photo { display: block; width: 100%; height: auto; max-height: 72vh; margin: 0; border-radius: 2px; object-fit: contain; }
+.atlas-postcard-place { display: none; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 16px; margin: 2px 0 6px; overflow-wrap: anywhere; }
 .atlas-postcard .atlas-entry-story { font-size: 14px; line-height: 1.65; color: var(--text); opacity: .86; }
 .atlas-postcard .atlas-entry-byline { font-size: 13px; font-style: italic; color: var(--accent); margin: 2px 0 8px; }
 
