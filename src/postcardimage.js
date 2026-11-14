@@ -2,7 +2,8 @@
 // shared as a picture (Instagram Stories/Feed, WhatsApp status, etc.) through the native share
 // sheet. Pure canvas — no dependencies. Resolves to a Blob, or null when it cannot be drawn
 // (e.g. the photo host sends no CORS headers); callers then fall back to the plain link share.
-const W = 1080, H = 1350;
+// 9:16 so an Instagram/WhatsApp Story fills the screen with no bars; the card sits in the centre 4:5 band, so a Feed crop keeps it whole.
+const W = 1080, H = 1920, BAND = 1350, BAND_TOP = (H - BAND) / 2;
 const PAPER = "#f3efe6", INK = "#2a2620", BLUE = "#2C86A6";
 const SANS = "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const HEAD = "Poppins, Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
@@ -105,10 +106,10 @@ export async function renderPostcardImage(entry, labels) {
     if (!ctx) return null;
 
     // backdrop + paper card
-    const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, "#0e1416"); bg.addColorStop(1, "#080b0c");
-    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = BLUE; ctx.fillRect(0, 0, W, H); // brand blue, one flat colour
+    ctx.translate(0, BAND_TOP); // everything below was laid out for a 1080x1350 band
     const CX = 56, CY = 52, CW = W - 112, CH = 1176, PAD = 40, IX = CX + PAD, IW = CW - PAD * 2;
-    ctx.save(); ctx.shadowColor = "rgba(0,0,0,.5)"; ctx.shadowBlur = 30; ctx.shadowOffsetY = 8;
+    ctx.save(); ctx.shadowColor = "rgba(0,30,45,.38)"; ctx.shadowBlur = 36; ctx.shadowOffsetY = 10;
     ctx.fillStyle = PAPER; rr(ctx, CX, CY, CW, CH, 26); ctx.fill(); ctx.restore();
 
     // ---- measure the text first so the photo takes whatever height is left ----
@@ -183,7 +184,7 @@ export async function renderPostcardImage(entry, labels) {
     }
 
     // ---- footer: discreet brand line under the card ----
-    ctx.textAlign = "center"; ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.font = `600 28px ${SANS}`;
+    ctx.textAlign = "center"; ctx.fillStyle = "rgba(255,255,255,.82)"; ctx.font = `600 28px ${SANS}`;
     if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
     ctx.fillText("The Van Web App", W / 2, 1298);
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";

@@ -102,9 +102,9 @@ export default async function handler(request) {
     const photoBox = photo ? h("div", { width: 460, height: 496, background: "#e4ded1", borderRadius: 8, alignItems: "center", justifyContent: "center", overflow: "hidden" },
       h("img", { width: 460, height: 496, objectFit: "contain" }, undefined, { src: photo })) : null;
 
-    const tree = h("div", { width: 1200, height: 630, flexDirection: "column", alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg, #0e1416, #080b0c)", fontFamily: "Inter" }, [
-      h("div", { width: 1144, height: 540, background: "#f3efe6", borderRadius: 24, padding: 22, gap: 24, boxShadow: "0 12px 40px rgba(0,0,0,.5)" }, [photoBox, textCol]),
-      h("div", { marginTop: 14, fontSize: 21, fontWeight: 500, color: "rgba(255,255,255,.55)", letterSpacing: 2 }, "The Van Web App"),
+    const tree = h("div", { width: 1200, height: 630, flexDirection: "column", alignItems: "center", justifyContent: "center", background: BLUE, fontFamily: "Inter" }, [
+      h("div", { width: 1144, height: 540, background: "#f3efe6", borderRadius: 24, padding: 22, gap: 24, boxShadow: "0 12px 40px rgba(0,30,45,.38)" }, [photoBox, textCol]),
+      h("div", { marginTop: 14, fontSize: 21, fontWeight: 500, color: "rgba(255,255,255,.82)", letterSpacing: 2 }, "The Van Web App"),
     ]);
 
     return new ImageResponse(tree, {

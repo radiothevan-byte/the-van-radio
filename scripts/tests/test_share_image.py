@@ -49,7 +49,7 @@ with sync_playwright() as p:
         if len(c) == 1 and c[0]["files"]:
             f = c[0]["files"][0]; check(f["type"] == "image/png" and f["name"].endswith(".png") and f["size"] > 20000, "PNG file: %s %s" % (f["type"], f["size"]))
             check("/postcard/id-1" in c[0]["text"], "caption carries the postcard link")
-            raw = base64.b64decode(f["data"].split(",", 1)[1]); im = Image.open(io.BytesIO(raw)); check(im.size == (1080, 1350), "image is 1080x1350: %s" % (im.size,))
+            raw = base64.b64decode(f["data"].split(",", 1)[1]); im = Image.open(io.BytesIO(raw)); check(im.size == (1080, 1920), "image is 1080x1920 (9:16): %s" % (im.size,))
             if w == 390: im.save("share_card.png")
         check(not pg.errs, "no page errors " + str(pg.errs)); ctx.close()
     # card without a photo or song still renders; no song fields
