@@ -25,10 +25,27 @@ export function normalizeSong(s) {
   if (!s || typeof s !== "object") return null;
   const title = str(s.title, 140);
   if (!title) return null;
-  return {
+  const out = {
     id: str(s.id, 80), title, artist: str(s.artist, 140), link: httpsOnly(s.link),
     noteEl: str(s.noteEl, 400), noteEn: str(s.noteEn, 400),
   };
+  const identity = normalizeIdentity(s.identity);
+  if (identity) out.identity = identity;
+  return out;
+}
+
+// Music identity (composer / lyricist / album / year). Only fields that hold a value survive;
+// when none does there is no `identity` at all and the section is not rendered.
+function normalizeIdentity(i) {
+  if (!i || typeof i !== "object") return null;
+  const y = parseInt(i.year, 10);
+  const out = {};
+  const composer = str(i.composer, 160), lyricist = str(i.lyricist, 160), album = str(i.album, 160);
+  if (composer) out.composer = composer;
+  if (lyricist) out.lyricist = lyricist;
+  if (album) out.album = album;
+  if (Number.isInteger(y) && y >= 1900 && y <= new Date().getFullYear() + 1) out.year = y;
+  return Object.keys(out).length ? out : null;
 }
 
 export function normalizePoll(p) {

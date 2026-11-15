@@ -1144,7 +1144,389 @@ function contentEngineTick() {
   } finally {
     lock.releaseLock();
   }
+  // Music identity lookup for newly queued songs. Isolated: a failure here can never affect publishing.
+  try { contentIdentityTick_(); } catch (e) { Logger.log("contentIdentityTick_ failed: " + e); }
 }
+
+// =====================================================================
+// SONG MUSIC IDENTITY — composer / lyricist / album / release year
+// ---------------------------------------------------------------------
+// Stored NEXT TO the song, in the same "Song of the Day" sheet row, in six extra columns:
+//   Composer | Lyricist | Album | Release Year | Identity Status | Identity Source
+// Looked up ONCE per song (daily trigger, only for rows that were never looked up), never on an
+// app load. The public "content" endpoint only READS these cells.
+//
+// Identity Status:  (blank) = not looked up yet   Auto = found automatically
+//                   Manual  = typed by you, never overwritten   None = looked up, nothing reliable
+// Manual correction: type the values in the four columns and set Identity Status = Manual
+// (typing any value in those columns is enough — a row with a value is never auto-filled).
+// To hide the section for a song: Identity Status = None and clear the four columns.
+// To look a song up again: clear its four columns and Identity Status.
+//
+// ONE-TIME SETUP: paste this script, run setupSongIdentityColumns() once (Google will ask to authorize
+// "connect to an external service" — Review permissions → Allow), re-deploy as a NEW VERSION (same URL).
+// Then refreshSongIdentity() fills the current song straight away; afterwards the daily tick does it.
+//
+// Sources (reliability over completeness — a field without solid evidence stays empty):
+//   1. YouTube Data API (optional, only if the Script Property YOUTUBE_API_KEY is set): when the
+//      video is a distributor "Provided to YouTube by …" upload whose "Title · Artist" line equals
+//      the sheet's title + artist, its Composer / Lyricist / Album lines are used.
+//   2. MusicBrainz (no key): recording must match title + artist + version flags (live, acoustic,
+//      remix …) exactly; composer/lyricist come ONLY from explicit "composer"/"lyricist" credits of
+//      the one work linked to that recording; album = earliest Official studio Album that contains
+//      it; year = first release year of the recording, only if all matching recordings agree.
+// =====================================================================
+var IDENTITY_HEADERS = ["Composer", "Lyricist", "Album", "Release Year", "Identity Status", "Identity Source"];
+var IDENTITY_MAX_PER_RUN = 3;
+var IDENTITY_WINDOW_DAYS = 3;       // only songs published/queued from (today - 3 days) onward are looked up
+var IDENTITY_MIN_SCORE = 85;
+var MB_BASE = "https://musicbrainz.org/ws/2/";
+var MB_UA = "TheVanRadio/1.0 ( https://the-van-radio.vercel.app )";
+
+// Version words. FLAG = changes the performance (must agree on both sides); NOISE = ignorable.
+var ID_FLAG_MAP = {
+  live: "live", "ζωντανα": "live", "ζωντανη": "live", unplugged: "live",
+  acoustic: "acoustic", "ακουστικη": "acoustic", "ακουστικο": "acoustic",
+  remix: "remix", remixed: "remix", rmx: "remix", mix: "remix", rework: "remix", reworked: "remix", dub: "remix",
+  edit: "edit", extended: "extended", instrumental: "instrumental", demo: "demo", cover: "cover",
+  orchestral: "orchestral", symphonic: "orchestral", session: "session", sessions: "session",
+  reprise: "reprise", karaoke: "karaoke", acapella: "acapella", cappella: "acapella"
+};
+var ID_NOISE = {
+  version: 1, album: 1, single: 1, original: 1, remaster: 1, remastered: 1, mono: 1, stereo: 1, deluxe: 1,
+  edition: 1, bonus: 1, track: 1, feat: 1, ft: 1, featuring: 1, radio: 1, studio: 1, official: 1, video: 1,
+  audio: 1, lyrics: 1, lyric: 1, hd: 1
+};
+
+function idNorm_(s) {
+  return String(s === null || s === undefined ? "" : s).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/ς/g, "σ")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9\u0370-\u03ff\u0400-\u04ff]+/g, " ")
+    .replace(/\s+/g, " ").trim();
+}
+
+function idClassify_(text) {
+  var toks = idNorm_(text).split(" ").filter(Boolean), flags = {}, remove = false;
+  toks.forEach(function (t) {
+    if (ID_FLAG_MAP[t]) { flags[ID_FLAG_MAP[t]] = 1; remove = true; }
+    else if (ID_NOISE[t] || /^\d{4}$/.test(t)) remove = true;
+  });
+  return { remove: remove, flags: flags };
+}
+
+// "Song (Live at X) - 2011 Remaster" -> { base:"song", flags:["live"] }
+function idParseTitle_(raw) {
+  var flags = {};
+  function merge(f) { for (var k in f) flags[k] = 1; }
+  var s = String(raw === null || raw === undefined ? "" : raw);
+  s = s.replace(/[\(\[\{]([^\)\]\}]*)[\)\]\}]/g, function (m, inner) {
+    var c = idClassify_(inner);
+    if (c.remove) { merge(c.flags); return " "; }
+    return " " + inner + " ";
+  });
+  var parts = s.split(/\s+[-–—]\s+/);
+  if (parts.length > 1) {
+    var keep = [parts[0]];
+    for (var i = 1; i < parts.length; i++) {
+      var c = idClassify_(parts[i]);
+      if (c.remove) merge(c.flags); else keep.push(parts[i]);
+    }
+    s = keep.join(" ");
+  }
+  return { base: idNorm_(s), flags: Object.keys(flags).sort() };
+}
+
+function idSplitArtists_(raw) {
+  return String(raw || "").split(/\s+(?:και|and|x|feat\.?|ft\.?|featuring|with|&)\s+|\s*[,;\/&]\s*/i)
+    .map(function (x) { return x.trim(); }).filter(Boolean);
+}
+
+// credits = [[name variants of artist 1], [variants of artist 2], ...]; joined = the full credit string
+function idArtistMatch_(qArtist, credits, joined) {
+  var q = idNorm_(qArtist);
+  if (!q || !credits || !credits.length) return false;
+  if (joined && idNorm_(joined) === q) return true;
+  function is(variants, p) { return variants.some(function (n) { return n && idNorm_(n) === p; }); }
+  if (credits.length === 1) return is(credits[0], q);
+  var qParts = idSplitArtists_(qArtist).map(idNorm_).filter(Boolean);
+  if (!qParts.length) return false;
+  return qParts.every(function (p) { return credits.some(function (c) { return is(c, p); }); }) &&
+         credits.every(function (c) { return qParts.some(function (p) { return is(c, p); }); });
+}
+
+function idSameFlags_(a, b) { return a.join(",") === b.join(","); }
+
+function idYear_(v) {
+  var m = /^(\d{4})/.exec(String(v === null || v === undefined ? "" : v).trim());
+  if (!m) return "";
+  var y = parseInt(m[1], 10);
+  return (y >= 1900 && y <= new Date().getFullYear() + 1) ? y : "";
+}
+
+function idNames_(list) {          // dedupe, drop special MusicBrainz placeholders, max 4
+  var seen = {}, out = [];
+  (list || []).forEach(function (n) {
+    n = contentClean_(n, 120);
+    var k = idNorm_(n);
+    if (!n || !k || seen[k] || /^\[.*\]$/.test(n)) return;
+    seen[k] = 1; out.push(n);
+  });
+  return out.slice(0, 4).join(", ");
+}
+
+function idVideoId_(url) {
+  var m = /(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/|\/live\/)([A-Za-z0-9_-]{11})/.exec(String(url || ""));
+  return m ? m[1] : "";
+}
+
+// ---- network layer (the only place that touches UrlFetchApp) ----
+function idFetchJson_(url, sleepMs) {
+  if (sleepMs) Utilities.sleep(sleepMs);
+  for (var attempt = 0; attempt < 2; attempt++) {
+    var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { "User-Agent": MB_UA, "Accept": "application/json" } });
+    var code = res.getResponseCode();
+    if (code === 200) return JSON.parse(res.getContentText());
+    if ((code === 503 || code === 429) && attempt === 0) { Utilities.sleep(2500); continue; }
+    throw new Error("http-" + code);
+  }
+}
+function idMb_(path) { return idFetchJson_(MB_BASE + path, 1100); }   // MusicBrainz: max 1 request / second
+
+// ---- YouTube (optional) ----
+// Returns { composer, lyricist, album } ONLY for a distributor "Provided to YouTube by" description whose
+// "Title · Artist" line is the same song and artist as the sheet row. Anything else -> null.
+function idParseYouTubeDescription_(desc, q) {
+  var lines = String(desc || "").split(/\r?\n/).map(function (l) { return l.trim(); });
+  if (!/^Provided to YouTube by/i.test(lines[0] || "")) return null;
+  var ti = -1;
+  for (var i = 1; i < lines.length; i++) { if (lines[i].indexOf(" · ") > 0) { ti = i; break; } }
+  if (ti < 0) return null;
+  var parts = lines[ti].split(" · ").map(function (x) { return x.trim(); });
+  var t = idParseTitle_(parts[0]);
+  if (t.base !== q.base || !idSameFlags_(t.flags, q.flags)) return null;
+  if (!idArtistMatch_(q.artist, parts.slice(1).map(function (p) { return [p]; }), parts.slice(1).join(" & "))) return null;
+  var res = { composer: "", lyricist: "", album: "" };
+  for (var j = ti + 1; j < lines.length; j++) {
+    if (lines[j]) {
+      if (!/^(℗|©|Released on)/i.test(lines[j])) res.album = contentClean_(lines[j], 120);
+      break;
+    }
+  }
+  var comp = [], lyr = [];
+  lines.forEach(function (l) {
+    var m = /^(Composer\s*,?\s*Lyricist|Lyricist\s*,?\s*Composer)\s*:\s*(.+)$/i.exec(l);
+    if (m) { comp = comp.concat(m[2].split(/\s*[,;]\s*/)); lyr = lyr.concat(m[2].split(/\s*[,;]\s*/)); return; }
+    m = /^Composers?\s*:\s*(.+)$/i.exec(l); if (m) comp = comp.concat(m[1].split(/\s*[,;]\s*/));
+    m = /^(?:Lyricists?|Lyrics by)\s*:\s*(.+)$/i.exec(l); if (m) lyr = lyr.concat(m[1].split(/\s*[,;]\s*/));
+  });
+  res.composer = idNames_(comp); res.lyricist = idNames_(lyr);
+  return (res.composer || res.lyricist || res.album) ? res : null;
+}
+
+function idLookupYouTube_(q, link) {
+  var key = PropertiesService.getScriptProperties().getProperty("YOUTUBE_API_KEY");
+  var vid = idVideoId_(link);
+  if (!key || !vid) return null;
+  var data = idFetchJson_("https://www.googleapis.com/youtube/v3/videos?part=snippet&id=" + vid + "&key=" + encodeURIComponent(key), 0);
+  var item = data && data.items && data.items[0];
+  if (!item || !item.snippet) return null;
+  return idParseYouTubeDescription_(item.snippet.description, q);
+}
+
+// ---- MusicBrainz ----
+function idMbRecordingFlags_(rec) {
+  var p = idParseTitle_(rec.title), f = {};
+  p.flags.forEach(function (x) { f[x] = 1; });
+  idNorm_(rec.disambiguation || "").split(" ").forEach(function (t) { if (ID_FLAG_MAP[t]) f[ID_FLAG_MAP[t]] = 1; });
+  var rels = rec.releases || [];
+  if (rels.length && rels.every(function (r) {
+    var st = (r["release-group"] && r["release-group"]["secondary-types"]) || [];
+    return st.indexOf("Live") >= 0;
+  })) f.live = 1;
+  return Object.keys(f).sort();
+}
+
+function idMbMatches_(recs, q) {
+  return (recs || []).filter(function (rec) {
+    if (!rec || rec.video) return false;
+    if (parseInt(rec.score, 10) < IDENTITY_MIN_SCORE) return false;
+    var p = idParseTitle_(rec.title);
+    if (p.base !== q.base) return false;
+    if (!idSameFlags_(idMbRecordingFlags_(rec), q.flags)) return false;
+    var credit = rec["artist-credit"] || [];
+    var credits = credit.map(function (c) { return [c.name, c.artist && c.artist.name]; });
+    var joined = credit.map(function (c) { return (c.name || "") + (c.joinphrase || ""); }).join("");
+    return idArtistMatch_(q.artist, credits, joined);
+  });
+}
+
+// Album = earliest Official, dated, studio Album (no compilation/live/soundtrack/... type) among the matched recordings.
+function idMbAlbum_(matches, q) {
+  var best = null;
+  matches.forEach(function (rec) {
+    (rec.releases || []).forEach(function (r) {
+      var rg = r["release-group"] || {};
+      var sec = rg["secondary-types"] || [];
+      var okSec = sec.length === 0 || (q.flags.indexOf("live") >= 0 && sec.length === 1 && sec[0] === "Live");
+      if (r.status !== "Official" || rg["primary-type"] !== "Album" || !okSec) return;
+      var d = String(r.date || "");
+      if (!/^\d{4}/.test(d) || !contentClean_(r.title, 120)) return;
+      if (!best || d < best.date) best = { title: contentClean_(r.title, 120), date: d };
+    });
+  });
+  return best ? best.title : "";
+}
+
+// Song year = first-release year of the matched recording(s); shown only if they all agree.
+function idMbYear_(matches) {
+  var years = {}, n = 0;
+  matches.forEach(function (rec) {
+    var y = idYear_(rec["first-release-date"]);
+    if (y) { years[y] = 1; n++; }
+  });
+  var keys = Object.keys(years);
+  return (n && keys.length === 1) ? parseInt(keys[0], 10) : "";
+}
+
+function idWorkIds_(recDetail) {
+  var ids = {};
+  ((recDetail && recDetail.relations) || []).forEach(function (rel) {
+    if (rel.type !== "performance" || !rel.work || !rel.work.id) return;
+    var attrs = rel.attributes || [];
+    if (attrs.indexOf("medley") >= 0 || attrs.indexOf("partial") >= 0) return;
+    ids[rel.work.id] = 1;
+  });
+  return Object.keys(ids);
+}
+
+// Only explicit "composer" / "lyricist" relationships. A bare "writer" credit is not enough.
+function idWorkCredits_(work) {
+  var comp = [], lyr = [];
+  ((work && work.relations) || []).forEach(function (rel) {
+    if (rel["target-type"] && rel["target-type"] !== "artist") return;
+    if (rel.ended) return;
+    var name = rel.artist && rel.artist.name;
+    if (rel.type === "composer") comp.push(name);
+    else if (rel.type === "lyricist") lyr.push(name);
+  });
+  return { composer: idNames_(comp), lyricist: idNames_(lyr) };
+}
+
+function idLookupMusicBrainz_(q) {
+  var esc = function (s) { return String(s).replace(/["\\]/g, " "); };
+  var titleForQuery = esc(q.rawBase || q.base);
+  var query = 'recording:"' + titleForQuery + '" AND artist:"' + esc(q.artist) + '"';
+  var found = idMb_("recording/?query=" + encodeURIComponent(query) + "&fmt=json&limit=15");
+  var matches = idMbMatches_(found && found.recordings, q);
+  if (!matches.length) return null;
+  matches.sort(function (a, b) { return (parseInt(b.score, 10) || 0) - (parseInt(a.score, 10) || 0); });
+
+  var out = { composer: "", lyricist: "", album: idMbAlbum_(matches, q), year: idMbYear_(matches), source: "MusicBrainz rec " + matches[0].id };
+  // credits: every matched recording (max 3) must point to the same single work
+  var works = {};
+  matches.slice(0, 3).forEach(function (rec) {
+    idWorkIds_(idMb_("recording/" + rec.id + "?inc=work-rels&fmt=json")).forEach(function (w) { works[w] = 1; });
+  });
+  var ids = Object.keys(works);
+  if (ids.length === 1) {
+    var c = idWorkCredits_(idMb_("work/" + ids[0] + "?inc=artist-rels&fmt=json"));
+    out.composer = c.composer; out.lyricist = c.lyricist;
+    out.source += ", work " + ids[0];
+  }
+  return out;
+}
+
+// Pure orchestration: YouTube (exact upload metadata) first, MusicBrainz fills the gaps.
+function identityLookup_(title, artist, link) {
+  var p = idParseTitle_(title);
+  var q = { base: p.base, rawBase: p.base, flags: p.flags, artist: artist };
+  if (!q.base || !idNorm_(artist)) return null;
+  var yt = null, mb = null, ytErr = false;
+  try { yt = idLookupYouTube_(q, link); } catch (e) { ytErr = true; }       // never blocks the MusicBrainz lookup
+  mb = idLookupMusicBrainz_(q);                                              // throws on network/HTTP errors -> retried next run
+  var res = {
+    composer: (yt && yt.composer) || (mb && mb.composer) || "",
+    lyricist: (yt && yt.lyricist) || (mb && mb.lyricist) || "",
+    album: (mb && mb.album) || (yt && yt.album) || "",
+    year: (mb && mb.year) || ""
+  };
+  var src = [];
+  if (yt) src.push("YouTube");
+  if (mb) src.push(mb.source);
+  res.source = src.join("; ");
+  if (!(res.composer || res.lyricist || res.album || res.year)) return null;
+  return res;
+}
+
+// ---- sheet side ----
+function identityEnsureColumns_(sheet) {
+  var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+  var added = false;
+  IDENTITY_HEADERS.forEach(function (h) {
+    if (header.indexOf(h) !== -1) return;
+    header.push(h);
+    sheet.getRange(1, header.length).setValue(h).setFontWeight("bold").setBackground("#0a0d0b").setFontColor("#39ACD0");
+    added = true;
+  });
+  if (added) {
+    var col = header.indexOf("Identity Status") + 1;
+    sheet.getRange(2, col, 500, 1).setDataValidation(
+      SpreadsheetApp.newDataValidation().requireValueInList(["Auto", "Manual", "None"], true).setAllowInvalid(false).build());
+  }
+  return added;
+}
+
+// Run once from the editor (safe to repeat): adds the six columns to the "Song of the Day" sheet.
+function setupSongIdentityColumns() {
+  var sh = SpreadsheetApp.openById(SHEET_ID).getSheetByName(SONG_SHEET_NAME);
+  if (!sh) { Logger.log("Sheet '" + SONG_SHEET_NAME + "' not found — run setupContentSheets first."); return; }
+  Logger.log(identityEnsureColumns_(sh) ? "Identity columns added." : "Identity columns already exist — nothing changed.");
+}
+
+// Looks up songs that have no identity yet. Called by the daily tick; also runnable by hand.
+function contentIdentityTick_(maxRows) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheet = ss.getSheetByName(SONG_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return 0;
+  identityEnsureColumns_(sheet);
+  var idx = contentHeaderIndex_(sheet);
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).getValues();
+  var today = contentToday_(), floor = contentAddDays_(today, -IDENTITY_WINDOW_DAYS);
+  var done = 0;
+  for (var i = 0; i < rows.length && done < (maxRows || IDENTITY_MAX_PER_RUN); i++) {
+    var r = rows[i];
+    var st = String(r[idx["Status"]]).trim();
+    if (st !== "Approved" && st !== "Scheduled" && st !== "Published") continue;
+    var d = contentDay_(r[idx["Publish Date"]]);
+    if (d && d < floor) continue;
+    var hasValue = ["Composer", "Lyricist", "Album", "Release Year", "Identity Status"].some(function (h) {
+      return contentClean_(r[idx[h]], 200) !== "";
+    });
+    if (hasValue) continue;                                   // looked up before, or typed by hand
+    var title = contentClean_(r[idx["Title"]], 140), artist = contentClean_(r[idx["Artist"]], 140);
+    if (!title || !artist) continue;
+    var res;
+    try { res = identityLookup_(title, artist, contentHttps_(r[idx["Link URL"]])); }
+    catch (err) { Logger.log("Identity lookup failed for '" + title + "': " + err + " (will retry next run)"); continue; }
+    var rowNo = i + 2;
+    function put(h, v) { sheet.getRange(rowNo, idx[h] + 1).setValue(v); }
+    if (res) {
+      put("Composer", res.composer); put("Lyricist", res.lyricist); put("Album", res.album);
+      put("Release Year", res.year); put("Identity Source", res.source); put("Identity Status", "Auto");
+    } else {
+      put("Identity Status", "None"); put("Identity Source", "no reliable match");
+    }
+    done++;
+    Logger.log("Identity for '" + title + "' / '" + artist + "': " + (res ? JSON.stringify(res) : "none"));
+  }
+  if (done) CacheService.getScriptCache().remove(CONTENT_CACHE_KEY);
+  return done;
+}
+
+// Run by hand from the editor to look up right now (e.g. after approving a song).
+function refreshSongIdentity() { contentIdentityTick_(10); }
 
 // ---- Read side: what the app is allowed to see ----
 function buildPublishedContent_() {
@@ -1175,6 +1557,16 @@ function buildPublishedContent_() {
         noteEn: contentClean_(best[idx["Note EN"]], 400),
         date: contentDayStr_(bestDate)
       };
+      // Music identity: only fields that hold a value; the whole key is absent when nothing is there.
+      var ident = {
+        composer: contentClean_(best[idx["Composer"]], 160),
+        lyricist: contentClean_(best[idx["Lyricist"]], 160),
+        album: contentClean_(best[idx["Album"]], 160),
+        year: idYear_(best[idx["Release Year"]])
+      };
+      var identOut = {};
+      ["composer", "lyricist", "album", "year"].forEach(function (k) { if (ident[k]) identOut[k] = ident[k]; });
+      if (Object.keys(identOut).length) out.song.identity = identOut;
     }
   }
 
