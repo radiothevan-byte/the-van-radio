@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 // FIX: "Map" was imported here as the lucide-react icon component, which
 // shadowed the built-in JS `Map` constructor for the rest of this file. This
 // is exactly what broke Van Atlas: buildAtlasGroups() below does `new Map()`
@@ -17,6 +17,8 @@ import { LangProvider, LangToggle, useLang, DICT, placeLabel } from "./i18n.jsx"
 import { ROADBOOK_EN } from "./i18n-screens.js";
 import { shareLink, shareImage, canShareImages, journeyShareUrl, postcardShareUrl } from "./share.js";
 import { renderPostcardImage } from "./postcardimage.js";
+import AtlasSheet from "./atlassheet.jsx";
+import { REDESIGN_CSS } from "./redesign.js";
 import { ContentProvider, SongOfTheDayCard, VanPollCard, SongPlayLink, CONTENT_CSS } from "./content.jsx";
 import { trackEvent, trackReturningVisit } from "./analytics.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
@@ -2687,6 +2689,7 @@ function VanAtlasView({ sharedPostcardId, sharedNonce, myVanSongs, myVanPostcard
   const [gridLimit, setGridLimit] = useState(12);
   const [openedPostcard, setOpenedPostcard] = useState(null);
   const sharedRef = useRef(null);
+  const closeSheet = useCallback(() => setActiveGroups(null), []);
   const galleryPostcards = (allEntries || []).filter((e) => e.kind === "postcard");
 
   useEffect(() => {
@@ -2804,36 +2807,17 @@ function VanAtlasView({ sharedPostcardId, sharedNonce, myVanSongs, myVanPostcard
             </div>
           )}
 
-          {activeGroups && (() => {
-            // Flatten (place heading + its entries) so a big merged cluster
-            // can be shown progressively instead of dumping hundreds of cards.
-            let shown = 0;
-            const total = activeGroups.reduce((n, g) => n + g.entries.length, 0);
-            return (
-              <div className="atlas-detail-panel fade-in">
-                <button className="atlas-detail-close" onClick={() => setActiveGroups(null)}><X size={18} /></button>
-                {activeGroups.map((g, gi) => {
-                  if (shown >= panelLimit) return null;
-                  const room = panelLimit - shown;
-                  const visible = g.entries.slice(0, room);
-                  shown += visible.length;
-                  return (
-                    <div key={gi}>
-                      <div className="atlas-detail-place">📍 {g.name}{g.entries.length > 1 ? ` · ${g.entries.length}` : ""}</div>
-                      {visible.map((e, i) => (
-                        <AtlasEntryCard key={e.kind + ":" + e.id + ":" + i} entry={e} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={onSaveSong} onSavePostcard={onSavePostcard} />
-                      ))}
-                    </div>
-                  );
-                })}
-                {total > panelLimit && (
-                  <button type="button" className="postcard-map-toggle" onClick={() => setPanelLimit((n) => n + 30)}>
-                    {t("atlas.more", { n: total - panelLimit })}
-                  </button>
-                )}
-              </div>
-            );
-          })()}
+          {activeGroups && (
+            <AtlasSheet
+              groups={activeGroups}
+              panelLimit={panelLimit}
+              onMore={() => setPanelLimit((n) => n + 30)}
+              onClose={closeSheet}
+              renderEntry={(e) => (
+                <AtlasEntryCard entry={e} myVanSongs={myVanSongs} myVanPostcards={myVanPostcards} onSaveSong={onSaveSong} onSavePostcard={onSavePostcard} />
+              )}
+            />
+          )}
 
           {!activeGroups && !showTextOnly && textOnly.length > 0 && (
             <button type="button" className="postcard-map-toggle" onClick={() => setShowTextOnly(true)}>
@@ -3312,7 +3296,8 @@ function TheVanAppInner() {
     <PromotionsProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} actions={promoActions}>
     <ContentProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} onEvent={trackEvent} myVanSongs={myVanSongs} onSaveSong={handleSaveSong} onSongPlay={() => setIsPlaying(false)}>
     <div className="app-root">
-      <style>{CSS}{PROMO_CSS}{CONTENT_CSS}</style>
+      <style>{CSS}{PROMO_CSS}{CONTENT_CSS}{REDESIGN_CSS}</style>
+      {tab !== "home" && <div className="rd-atmo" aria-hidden="true"><img src={HOME_HERO_WEBP} alt="" /></div>}
       <audio
         ref={audioRef}
         src={liveOn ? LIVE_STREAM_URL : (currentJourney ? currentJourney.audioUrl : undefined)}
