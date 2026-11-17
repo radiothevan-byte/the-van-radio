@@ -410,7 +410,7 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
 .jp-scroll > :first-child { margin-top: auto; }
 .jp-scroll > :last-child { margin-bottom: auto; }
 .jp-head { text-align: center; max-width: 100%; }
-.jp-head .detail-title { font-size: 23px; overflow-wrap: anywhere; }
+.jp-head .detail-title { font-family: 'Poppins', sans-serif; font-style: normal; font-weight: 700; font-size: 21px; line-height: 1.25; letter-spacing: 0; text-shadow: none; overflow-wrap: anywhere; }
 .jp-seek { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 420px; }
 .jp-seek .mini-seek { flex: 1; width: auto; min-width: 0; margin: 0; }
 .jp-seek .mini-seek:disabled { opacity: 0.45; }
@@ -422,4 +422,8 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
 .jp-actions { width: 100%; max-width: 420px; justify-content: flex-end; }
 .jp-note { text-align: center; margin: 0; }
 .jp-description { width: 100%; max-width: 420px; margin: 8px 0 0; text-align: left; font-size: 14px; line-height: 1.7; overflow: visible; }
+
+/* Song player: no yellow swash under the "Song of the Day" heading */
+.sp-head-text { padding-bottom: 0; }
+.sp-head-text::after { content: none; display: none; }
 `;
