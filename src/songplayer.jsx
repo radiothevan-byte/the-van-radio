@@ -100,6 +100,38 @@ function SkipIcon({ dir }) {
   );
 }
 
+// "Η μουσική ταυτότητα": quiet credits under the player. Shown only for songs that carry `identity`
+// (the Song of the Day); every field is optional and an empty field is simply not drawn.
+const ID_ICONS = {
+  music: <><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>,
+  lyrics: <><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
+  album: <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="2.4" /></>,
+  year: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>,
+};
+function MusicIdentity({ identity }) {
+  const { t } = useLang();
+  if (!identity) return null;
+  const rows = [
+    ["music", identity.composer], ["lyrics", identity.lyricist], ["album", identity.album], ["year", identity.year],
+  ].filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== "");
+  if (!rows.length) return null;
+  return (
+    <section className="sp-identity" aria-labelledby="sp-identity-h">
+      <h3 className="sp-identity-h" id="sp-identity-h">{t("content.song.identity")}</h3>
+      <ul className="sp-identity-list">
+        {rows.map(([k, v]) => (
+          <li key={k} className="sp-identity-row" data-field={k}>
+            <svg className="sp-identity-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ID_ICONS[k]}</svg>
+            <span className="sp-identity-label">{t(`content.song.identity.${k}`)}</span>
+            <span className="sp-identity-value">{String(v)}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+
 // `onSave` is optional (no save button without it); `heading` is the handwritten title at the top;
 // `trackPlay` is false for songs that are not the Song of the Day (no per-song analytics for those).
 export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent, onPlayStart, heading = "Song of the Day", trackPlay = true }) {
@@ -297,6 +329,7 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
         <a className="sp-open" href={link} target="_blank" rel="noopener noreferrer">
           {parsed.kind === "spotify" ? t("content.song.openSpotify") : t("content.song.openYoutube")} <span aria-hidden="true">↗</span>
         </a>
+        <MusicIdentity identity={song.identity} />
         </div>
         </div>
       </div>
@@ -397,4 +430,18 @@ export const SONGPLAYER_CSS = `
 .sp-save-on { border-color: rgba(255,210,63,0.85); background: rgba(255,210,63,0.1); color: #fff; }
 .sp-share { border-color: rgba(255,255,255,0.28); }
 .sp-open { margin-top: 14px; font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.6); text-decoration: none; }
+.sp-identity { margin: 20px 0 0; padding: 16px 2px 0; border-top: 1px solid rgba(255,255,255,0.12); text-align: left; }
+.sp-identity-h { margin: 0 0 12px; font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: var(--accent, #2ed0f2); text-align: center; }
+.sp-identity-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 18px max-content minmax(0, 1fr); column-gap: 9px; row-gap: 9px; align-items: baseline; }
+.sp-identity-row { display: contents; }
+.sp-identity-ico { align-self: center; color: rgba(255,255,255,0.55); }
+.sp-identity-label { font-size: 12.5px; color: rgba(255,255,255,0.58); white-space: nowrap; }
+.sp-identity-value { font-size: 13.5px; font-weight: 600; line-height: 1.35; color: #fff; overflow-wrap: anywhere; }
+/* very narrow phones: the label sits above its value so long names keep the full width */
+@media (max-width: 360px) {
+  .sp-identity-list { grid-template-columns: 18px minmax(0, 1fr); row-gap: 2px; }
+  .sp-identity-ico { grid-column: 1; grid-row: span 2; align-self: start; margin-top: 2px; }
+  .sp-identity-label, .sp-identity-value { grid-column: 2; }
+  .sp-identity-value { margin-bottom: 9px; }
+}
 `;
