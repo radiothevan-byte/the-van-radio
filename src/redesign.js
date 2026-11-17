@@ -245,6 +245,7 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
 .route-leaflet-wrap, .route-rows-map {
   border: 1px solid var(--rd-line-strong); border-radius: var(--rd-r-lg);
   box-shadow: inset 0 0 0 1px rgba(54, 196, 217, 0.06), 0 16px 34px -14px rgba(0, 0, 0, 0.8), 0 0 28px -12px rgba(54, 196, 217, 0.5);
+  isolation: isolate; /* keeps the frame's z-index:450 vignette (::after) from painting over the Atlas sheet */
 }
 .route-leaflet-map { background: #0b2a31; }
 /* Leaflet's own panes/controls use z-index 400-1000; contain them so every sheet/overlay above a map really sits on top of it */
