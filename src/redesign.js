@@ -400,11 +400,13 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
 }
 .jp-overlay .detail-close { z-index: 3; }
 .jp-art {
-  flex: none; width: min(62vw, 250px); aspect-ratio: 1 / 1; border-radius: 26px; overflow: hidden;
-  border: 1px solid var(--rd-line-strong); background: var(--surface);
+  flex: none; width: 100%; max-width: 420px; display: flex; justify-content: center; align-items: center;
+}
+.jp-art-img {
+  position: static; display: block; width: auto; height: auto; max-width: 100%; max-height: min(44vh, 360px); object-fit: contain;
+  border-radius: 22px; border: 1px solid var(--rd-line-strong); background: var(--surface);
   box-shadow: 0 22px 46px -16px rgba(0, 0, 0, 0.85), 0 0 40px -10px rgba(54, 196, 217, 0.55);
 }
-.jp-art-img { position: static; display: block; width: 100%; height: 100%; object-fit: cover; }
 .jp-scroll > :first-child { margin-top: auto; }
 .jp-scroll > :last-child { margin-bottom: auto; }
 .jp-head { text-align: center; max-width: 100%; }
@@ -417,7 +419,7 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
 .jp-controls .play-btn-lg { flex: none; }
 .jp-step { width: 44px; height: 44px; color: var(--text); }
 .jp-controls .mini-skip { width: 40px; height: 40px; color: var(--text-dim); }
-.jp-actions { justify-content: center; }
+.jp-actions { width: 100%; max-width: 420px; justify-content: flex-end; }
 .jp-note { text-align: center; margin: 0; }
 .jp-description { width: 100%; max-width: 420px; margin: 8px 0 0; text-align: left; font-size: 14px; line-height: 1.7; overflow: visible; }
 `;
