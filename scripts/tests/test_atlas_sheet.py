@@ -66,7 +66,7 @@ with sync_playwright() as p:
         first = pg.locator(".atlas-sheet-entry").first
         t0 = first.inner_text()
         check("Ρούτα 0" in t0 and "Τραγουδιστής 0" in t0 and "Λαϊκό" in t0 and "Μήνυμα 0" in t0, f"{tag} route entry keeps song/artist/genre/message")
-        check(first.locator("button:has-text('My Van')").count() == 1 and first.locator("button:has-text('Άκου'), button:has-text('Ακου'), button").count() >= 2, f"{tag} route entry keeps listen + My Van")
+        check(first.locator("button[aria-label*='My Van']").count() == 1 and first.locator("button:has-text('Άκου'), button:has-text('Ακου'), button").count() >= 2, f"{tag} route entry keeps listen + My Van")
         more = pg.locator(".atlas-sheet-more"); check(more.count() == 1, f"{tag} 'see more' button for a big location")
         more.scroll_into_view_if_needed(); more.click(); pg.wait_for_timeout(300)
         check(pg.locator(".atlas-sheet-entry .atlas-entry-card:not(.atlas-postcard)").count() == N_ROUTES, f"{tag} after 'more' all {N_ROUTES} route entries are there")
@@ -75,7 +75,7 @@ with sync_playwright() as p:
         full_story = pg.evaluate("[...document.querySelectorAll('.atlas-sheet .pcard-msg')].map(e=>e.textContent)")
         check(LONG in full_story, f"{tag} postcard story shown in full, not shortened")
         check(pg.locator(".atlas-sheet .pcard-front img").count() == 2 and pg.locator(".atlas-sheet .pcard-song").count() == 1, f"{tag} postcard photo + music info kept")
-        check(pg.locator(".atlas-sheet .atlas-postcard-actions button:has-text('My Van')").count() == 2, f"{tag} postcard My Van actions kept")
+        check(pg.locator(".atlas-sheet .atlas-postcard-actions button[aria-label*='My Van']").count() == 2, f"{tag} postcard My Van actions kept")
         # three states
         pg.locator(".atlas-sheet-btn-fold").click(); pg.wait_for_timeout(450)
         bx = sheet_box(pg); check(pg.locator(".atlas-sheet").get_attribute("data-snap") == "collapsed" and 90 <= bx["h"] <= 100, f"{tag} collapsed height {bx['h']:.0f}")

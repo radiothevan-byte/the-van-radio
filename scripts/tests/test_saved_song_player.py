@@ -65,7 +65,7 @@ with sync_playwright() as p:
     check(len(saved)==1 and saved[0]["id"]=="route-r1" and saved[0]["musicUrl"]==YT,"Atlas route: heart saves the song to My Van: %s"%saved)
     check(pg.locator(".sp-heart").get_attribute("fill")=="currentColor" and pg.locator(".sp-sheet").count()==1,"heart FILLED, player stays open")
     pg.locator(".sp-close").click(); pg.wait_for_timeout(250)
-    check("My Van" in first.locator(".atlas-entry-save").inner_text() and "atlas-entry-saved" in first.locator(".atlas-entry-save").get_attribute("class"),"the card's own button shows it is saved")
+    check("My Van" in first.locator(".atlas-entry-save").get_attribute("aria-label") and "atlas-entry-saved" in first.locator(".atlas-entry-save").get_attribute("class"),"the card's own button shows it is saved")
     # non-playable route link stays external
     sec=cards.filter(has_text="Άλλο").first
     check(sec.locator("a.atlas-entry-link").get_attribute("href")=="https://example.com/song","Atlas route with a non-YouTube link: still an external link")
@@ -77,7 +77,7 @@ with sync_playwright() as p:
     # 5) Saved postcards with a song link
     # 5a) saving from Atlas keeps the song details
     ctx,pg=new(); pg.goto(BASE+"/postcard/"+UUID); pg.wait_for_selector(".atlas-entry-card"); pg.wait_for_timeout(400)
-    pg.locator(".atlas-entry-save",has_text="My Van").click(); pg.wait_for_timeout(250)
+    pg.locator(".atlas-entry-save[aria-label*='My Van']").click(); pg.wait_for_timeout(250)
     sc=pg.evaluate("JSON.parse(localStorage.getItem('tvr_my_van_postcards')||'[]')")
     check(len(sc)==1 and sc[0]["musicUrl"]==YT and sc[0]["songTitle"]=="Ένα τραγούδι" and sc[0]["artist"]=="Κάποιος","saving a postcard stores its song title/artist/link: %s"%sc)
     pg.goto(BASE+"/myvan"); pg.wait_for_timeout(500); pg.locator(".myvan-tab",has_text="Postcards").click(); pg.wait_for_timeout(300)

@@ -2539,10 +2539,13 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
           )}
           {hasSong && (
             <button
-              className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
+              className={`atlas-entry-save atlas-entry-icon ${saved ? "atlas-entry-saved" : ""}`}
               onClick={() => onSaveSong({ id: songId, title: entry.songTitle, artist: entry.artist, musicUrl: entry.musicUrl, placeName: entry.placeName })}
+              aria-label={saved ? t("atlas.inMyVan") : t("content.song.save")}
+              title={saved ? t("atlas.inMyVan") : t("content.song.save")}
+              aria-pressed={saved}
             >
-              {saved ? t("atlas.inMyVan") : "+ My Van"}
+              <Heart size={19} strokeWidth={2} fill={saved ? "currentColor" : "none"} />
             </button>
           )}
         </div>
@@ -2602,14 +2605,20 @@ function AtlasEntryCard({ entry, myVanSongs, myVanPostcards, onSaveSong, onSaveP
         </div>
       </div>
       <div className="atlas-entry-actions atlas-postcard-actions">
+        {shareCopied && <span className="atlas-entry-note" role="status">{t("share.copied")}</span>}
         {canShare && (
-          <button className="atlas-entry-save" onClick={handleShare}>{shareCopied ? t("share.copied") : t("share.button")}</button>
+          <button className="atlas-entry-save atlas-entry-icon" onClick={handleShare} aria-label={t("share.button")} title={t("share.button")}>
+            <Share2 size={19} strokeWidth={2} />
+          </button>
         )}
         <button
-          className={`atlas-entry-save ${saved ? "atlas-entry-saved" : ""}`}
+          className={`atlas-entry-save atlas-entry-icon ${saved ? "atlas-entry-saved" : ""}`}
           onClick={() => onSavePostcard({ id: entry.id, placeName: entry.placeName, story: entry.story, photoUrl: entry.photoUrl, songTitle: entry.songTitle || "", artist: entry.artist || "", musicUrl: entry.musicUrl || "" })}
+          aria-label={saved ? t("atlas.inMyVan") : t("content.song.save")}
+          title={saved ? t("atlas.inMyVan") : t("content.song.save")}
+          aria-pressed={saved}
         >
-          {saved ? t("atlas.inMyVan") : "+ My Van"}
+          <Heart size={19} strokeWidth={2} fill={saved ? "currentColor" : "none"} />
         </button>
       </div>
     </div>
@@ -4531,6 +4540,9 @@ const CSS = `
   font-size: 11.5px; font-weight: 700; padding: 6px 12px; border-radius: 10px; cursor: pointer;
 }
 .atlas-entry-saved { color: var(--accent); border-color: var(--accent); }
+.atlas-entry-icon { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.atlas-postcard-actions { justify-content: flex-end; }
+.atlas-entry-note { margin-right: auto; font-size: 12px; color: var(--text-dim); }
 .atlas-textonly-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .atlas-textonly-hide {
   background: none; border: none; color: var(--accent);
