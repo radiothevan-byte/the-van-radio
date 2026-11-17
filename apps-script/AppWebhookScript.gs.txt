@@ -1735,9 +1735,11 @@ function handleContentDraft(data) {
 //     Stored in the sheet "Push Subscriptions" (technical keys only — no name, no email, no IP).
 //   * YOU decide what is sent, in the sheet "Push Outbox". A row is sent only when Status = "Approved" and
 //     its Send At time has passed:  Draft -> Approved (you) -> Sending -> Sent (automatic).
-//       - Topic "shows": one row per Saturday broadcast, written by hand (Send At = e.g. 30 min before).
-//       - Topic "news":  created automatically (Status Approved) when a Song of the Day is published today
-//                        or a Van Poll starts today. Set PUSH_AUTO_NEWS = false to turn that off.
+//       - Topic "shows": created automatically every Saturday (Status Approved, Send At = show start - lead).
+//                        Set PUSH_AUTO_SHOWS = false to turn that off. Cancel one by setting its row to Cancelled.
+//       - Topic "news":  created automatically (Status Approved) when a Song of the Day is published today,
+//                        a Van Poll starts today (PUSH_AUTO_NEWS) or a NEW row appears in the Journey sheet
+//                        (PUSH_AUTO_JOURNEYS). You can still add any extra row by hand.
 //   * The actual sending (encryption + delivery) is done by the GitHub Action "Send push notifications"
 //     (scripts/send-push.mjs, every ~15 min). It asks this script for what is due with form_type "push_due",
 //     authenticated with the Script Property PUSH_SENDER_SECRET, and reports back with "push_report".
@@ -1756,6 +1758,15 @@ var PUSH_TOPICS = ["shows", "news"];
 var PUSH_STATUSES = ["Draft", "Approved", "Sending", "Sent", "Cancelled"];
 var PUSH_MAX_SUBS = 5000;
 var PUSH_AUTO_NEWS = true;
+var PUSH_AUTO_SHOWS = true;        // Saturday broadcast notification, created automatically
+var PUSH_SHOW_DAY = 6;             // 0 = Sunday ... 6 = Saturday (script time zone = Greece)
+var PUSH_SHOW_HOUR = 18, PUSH_SHOW_MINUTE = 0;
+var PUSH_SHOW_LEAD_MIN = 0;        // minutes BEFORE the show start; 0 = at show time
+var PUSH_SHOW_GRACE_MIN = 30;      // never create a "starting now" notice more than this late
+var PUSH_AUTO_JOURNEYS = true;     // notify when a new row appears in the Journey sheet
+var PUSH_JOURNEY_SHEET = "Journey";
+var PUSH_JOURNEY_SEEN_KEY = "PUSH_JOURNEYS_SEEN";
+var PUSH_JOURNEY_SEEN_MAX = 600;   // Script Properties values are limited to ~9KB
 var PUSH_HOSTS = [
   /^fcm\.googleapis\.com$/, /^updates\.push\.services\.mozilla\.com$/, /^[a-z0-9-]+\.push\.apple\.com$/,
   /^web\.push\.apple\.com$/, /^[a-z0-9.-]+\.notify\.windows\.com$/
@@ -1848,9 +1859,16 @@ function handlePushUnsubscribe(data) {
   } finally { lock.releaseLock(); }
 }
 
-// Creates "news" notifications for content that goes live TODAY (song of the day / poll start). Idempotent via Ref.
+function pushHash_(str) {
+  var h = 5381, t = String(str);
+  for (var i = 0; i < t.length; i++) h = ((h * 33) ^ t.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+
+// Creates notifications automatically (all idempotent via the Ref column):
+//   * "shows": the Saturday broadcast; * "news": Song of the Day / Van Poll starting today / a new Journey.
 function pushCollectNews_(ss) {
-  if (!PUSH_AUTO_NEWS) return;
+  if (!PUSH_AUTO_NEWS && !PUSH_AUTO_SHOWS && !PUSH_AUTO_JOURNEYS) return;
   var out = ss.getSheetByName(PUSH_OUTBOX_SHEET);
   if (!out) return;
   var have = {};
@@ -1858,35 +1876,87 @@ function pushCollectNews_(ss) {
   var today = contentToday_(), now = new Date();
   var sendAt = new Date(today.getTime()); sendAt.setHours(10, 0, 0, 0);
   if (now > sendAt) sendAt = now;
-  function add(ref, titleEl, titleEn, bodyEl, bodyEn) {
-    if (have[ref]) return;
-    out.appendRow(["auto-" + Utilities.formatDate(now, "UTC", "yyyyMMddHHmmss") + "-" + Math.floor(Math.random() * 1000), "news", titleEl, titleEn, bodyEl, bodyEn, "/", sendAt, "Approved", "Auto", ref, now, "", ""]);
+  function addAt(ref, topic, at, titleEl, titleEn, bodyEl, bodyEn) {
+    if (have[ref]) return false;
+    out.appendRow(["auto-" + Utilities.formatDate(now, "UTC", "yyyyMMddHHmmss") + "-" + Math.floor(Math.random() * 1000), topic, titleEl, titleEn, bodyEl, bodyEn, "/", at, "Approved", "Auto", ref, now, "", ""]);
     have[ref] = true;
+    return true;
   }
-  var song = ss.getSheetByName(SONG_SHEET_NAME);
-  if (song && song.getLastRow() > 1) {
-    var idx = contentHeaderIndex_(song);
-    song.getRange(2, 1, song.getLastRow() - 1, song.getLastColumn()).getValues().forEach(function (r) {
-      if (String(r[idx["Status"]]).trim() !== "Published") return;
-      var d = contentDay_(r[idx["Publish Date"]]);
-      if (!d || d.getTime() !== today.getTime()) return;
-      var t = contentClean_(r[idx["Title"]], 80), a = contentClean_(r[idx["Artist"]], 60);
-      if (!t) return;
-      var body = a ? t + " — " + a : t;
-      add("song:" + contentClean_(r[idx["ID"]], 80), "Τραγούδι της Ημέρας", "Song of the Day", body, body);
-    });
+  function add(ref, titleEl, titleEn, bodyEl, bodyEn) { return addAt(ref, "news", sendAt, titleEl, titleEn, bodyEl, bodyEn); }
+
+  if (PUSH_AUTO_NEWS) {
+    var song = ss.getSheetByName(SONG_SHEET_NAME);
+    if (song && song.getLastRow() > 1) {
+      var idx = contentHeaderIndex_(song);
+      song.getRange(2, 1, song.getLastRow() - 1, song.getLastColumn()).getValues().forEach(function (r) {
+        if (String(r[idx["Status"]]).trim() !== "Published") return;
+        var d = contentDay_(r[idx["Publish Date"]]);
+        if (!d || d.getTime() !== today.getTime()) return;
+        var t = contentClean_(r[idx["Title"]], 80), a = contentClean_(r[idx["Artist"]], 60);
+        if (!t) return;
+        var body = a ? t + " — " + a : t;
+        add("song:" + contentClean_(r[idx["ID"]], 80), "Τραγούδι της Ημέρας", "Song of the Day", body, body);
+      });
+    }
+    var poll = ss.getSheetByName(POLL_SHEET_NAME);
+    if (poll && poll.getLastRow() > 1) {
+      var pidx = contentHeaderIndex_(poll);
+      poll.getRange(2, 1, poll.getLastRow() - 1, poll.getLastColumn()).getValues().forEach(function (r) {
+        if (String(r[pidx["Status"]]).trim() !== "Published") return;
+        var s = contentDay_(r[pidx["Start Date"]]);
+        if (!s || s.getTime() !== today.getTime()) return;
+        var qEl = contentClean_(r[pidx["Question EL"]], 140), qEn = contentClean_(r[pidx["Question EN"]], 140);
+        if (!qEl && !qEn) return;
+        add("poll:" + contentClean_(r[pidx["ID"]], 80), "Νέο ερώτημα στο The Van", "New question on The Van", qEl || qEn, qEn || qEl);
+      });
+    }
   }
-  var poll = ss.getSheetByName(POLL_SHEET_NAME);
-  if (poll && poll.getLastRow() > 1) {
-    var pidx = contentHeaderIndex_(poll);
-    poll.getRange(2, 1, poll.getLastRow() - 1, poll.getLastColumn()).getValues().forEach(function (r) {
-      if (String(r[pidx["Status"]]).trim() !== "Published") return;
-      var s = contentDay_(r[pidx["Start Date"]]);
-      if (!s || s.getTime() !== today.getTime()) return;
-      var qEl = contentClean_(r[pidx["Question EL"]], 140), qEn = contentClean_(r[pidx["Question EN"]], 140);
-      if (!qEl && !qEn) return;
-      add("poll:" + contentClean_(r[pidx["ID"]], 80), "Νέο ερώτημα στο The Van", "New question on The Van", qEl || qEn, qEn || qEl);
-    });
+
+  // Saturday broadcast. One row per Saturday (Ref show:yyyy-MM-dd), created any time that day up to the grace period.
+  if (PUSH_AUTO_SHOWS) {
+    try {
+      if (today.getDay() === PUSH_SHOW_DAY) {
+        var start = new Date(today.getTime()); start.setHours(PUSH_SHOW_HOUR, PUSH_SHOW_MINUTE, 0, 0);
+        var showAt = new Date(start.getTime() - PUSH_SHOW_LEAD_MIN * 60000);
+        if (now.getTime() <= start.getTime() + PUSH_SHOW_GRACE_MIN * 60000) {
+          var lead = PUSH_SHOW_LEAD_MIN > 0;
+          addAt("show:" + contentDayStr_(today), "shows", showAt,
+            lead ? "Η εκπομπή ξεκινά σύντομα" : "Η εκπομπή ξεκινά τώρα",
+            lead ? "The show starts soon" : "The show starts now",
+            "Άνοιξε το The Van και άκουσε.", "Open The Van and tune in.");
+        }
+      }
+    } catch (e) { console.error("pushCollectNews_ shows: " + e); }
+  }
+
+  // New Journey. The first run only records what already exists (no flood of old Journeys).
+  if (PUSH_AUTO_JOURNEYS) {
+    try {
+      var jsheet = ss.getSheetByName(PUSH_JOURNEY_SHEET);
+      if (jsheet && jsheet.getLastRow() > 1) {
+        var jidx = contentHeaderIndex_(jsheet);
+        var tCol = jidx["Title"] != null ? jidx["Title"] : 0, aCol = jidx["Audio URL"] != null ? jidx["Audio URL"] : 3;
+        var props = PropertiesService.getScriptProperties();
+        var raw = props.getProperty(PUSH_JOURNEY_SEEN_KEY);
+        var baseline = raw == null || raw === "";
+        var seen = [];
+        try { seen = baseline ? [] : JSON.parse(raw); } catch (e) { seen = []; baseline = true; }
+        var seenMap = {}; seen.forEach(function (h) { seenMap[h] = true; });
+        var fresh = [];
+        jsheet.getRange(2, 1, jsheet.getLastRow() - 1, jsheet.getLastColumn()).getValues().forEach(function (r) {
+          var title = contentClean_(r[tCol], 80), audio = String(r[aCol] || "").trim();
+          if (!title || !audio) return;                    // the app only shows rows with a title and audio
+          var h = pushHash_(title + "|" + audio);
+          if (seenMap[h]) return;
+          seenMap[h] = true; seen.push(h);
+          fresh.push({ h: h, title: title });
+        });
+        if (!baseline) fresh.slice(0, 3).forEach(function (j) {   // at most 3 per run, never a flood
+          add("journey:" + j.h, "Νέο Journey", "New Journey", j.title, j.title);
+        });
+        if (fresh.length || baseline) props.setProperty(PUSH_JOURNEY_SEEN_KEY, JSON.stringify(seen.slice(-PUSH_JOURNEY_SEEN_MAX)));
+      }
+    } catch (e) { console.error("pushCollectNews_ journeys: " + e); }
   }
 }
 
