@@ -247,7 +247,7 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
   box-shadow: inset 0 0 0 1px rgba(54, 196, 217, 0.06), 0 16px 34px -14px rgba(0, 0, 0, 0.8), 0 0 28px -12px rgba(54, 196, 217, 0.5);
 }
 .route-leaflet-map { background: #0b2a31; }
-.app-root .leaflet-tile-pane { filter: saturate(0.72) hue-rotate(150deg) brightness(0.8) contrast(1.05); }
+.app-root .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(1.15) contrast(.82) saturate(.4) sepia(.6) hue-rotate(115deg) saturate(1.8); }
 .route-leaflet-wrap::after, .route-rows-map .route-leaflet-wrap::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 450;
   box-shadow: inset 0 0 40px rgba(6, 20, 24, 0.55);
