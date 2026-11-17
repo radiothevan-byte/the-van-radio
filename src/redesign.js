@@ -247,6 +247,8 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
   box-shadow: inset 0 0 0 1px rgba(54, 196, 217, 0.06), 0 16px 34px -14px rgba(0, 0, 0, 0.8), 0 0 28px -12px rgba(54, 196, 217, 0.5);
 }
 .route-leaflet-map { background: #0b2a31; }
+/* Leaflet's own panes/controls use z-index 400-1000; contain them so every sheet/overlay above a map really sits on top of it */
+.app-root .leaflet-container { isolation: isolate; }
 .app-root .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(1.15) contrast(.82) saturate(.4) sepia(.6) hue-rotate(115deg) saturate(1.8); }
 .route-leaflet-wrap::after, .route-rows-map .route-leaflet-wrap::after {
   content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 450;
@@ -279,7 +281,7 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
 /* ---- Van Atlas: location Bottom Sheet ---- */
 .atlas-sheet {
   position: fixed; left: 0; right: 0; margin-left: auto; margin-right: auto; width: 100%; max-width: 460px;
-  bottom: var(--sheet-bottom, var(--tabbar-h)); z-index: 19;
+  bottom: var(--sheet-bottom, var(--tabbar-h)); z-index: 30;
   display: flex; flex-direction: column; box-sizing: border-box;
   height: var(--sheet-h, 50vh); height: var(--sheet-h, 50dvh);
   max-height: calc(100vh - var(--sheet-bottom, var(--tabbar-h)) - 12px); max-height: calc(100dvh - var(--sheet-bottom, var(--tabbar-h)) - max(12px, env(safe-area-inset-top, 0px)));
