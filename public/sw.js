@@ -8,6 +8,8 @@
  *    immediately; the cached shell / offline page is used only when the network fails.
  *  - Hashed build files (/assets/*) are cache-first (they are immutable by name).
  *  - Everything else falls through to the browser untouched.
+ *  - Push notifications (P7): a "push" handler shows the message, a "notificationclick" handler opens
+ *    a same-site page. Nothing else about caching/fetching changes.
  * Bump CACHE_VERSION to force-clear old caches.
  */
 const CACHE_VERSION = "v1";
@@ -69,4 +71,42 @@ self.addEventListener("fetch", (event) => {
     );
   }
   // anything else: not intercepted
+});
+
+// ---------------------------------------------------------------------------------------------
+// Push notifications (P7). The payload is JSON {title, body, url, tag}; only same-site paths are opened.
+function safePath(u) {
+  const s = typeof u === "string" ? u : "/";
+  return s.startsWith("/") && !s.startsWith("//") && !/[\\\s]/.test(s) ? s.slice(0, 200) : "/";
+}
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
+  const title = (typeof data.title === "string" && data.title ? data.title : "THE VAN").slice(0, 80);
+  const options = {
+    body: (typeof data.body === "string" ? data.body : "").slice(0, 160),
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { url: safePath(data.url) },
+  };
+  if (typeof data.tag === "string" && data.tag) options.tag = data.tag.slice(0, 64);
+  // userVisibleOnly: a notification must always be shown for every push.
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const path = safePath(event.notification.data && event.notification.data.url);
+  const target = new URL(path, self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if (new URL(c.url).origin === self.location.origin && "focus" in c) {
+          return c.focus().then(() => ("navigate" in c ? c.navigate(target).catch(() => null) : null));
+        }
+      }
+      return self.clients.openWindow ? self.clients.openWindow(target) : null;
+    })
+  );
 });

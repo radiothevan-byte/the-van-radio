@@ -386,4 +386,12 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
   .atlas-sheet { animation: none; transition: none; }
   .fade-in, .pill-btn, .hub-card, .tab-btn::before { animation: none; transition: none; }
 }
+
+/* ---- Notifications bell (p7) in the new look ---- */
+.push-bell-on { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 12px -3px rgba(54, 196, 217, 0.55); }
+.push-pop { background: var(--rd-card-bg); border-color: var(--rd-line-strong); box-shadow: var(--rd-shadow), var(--rd-glow); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.push-pop .content-note { color: var(--text-dim); }
+.push-btn { border-color: var(--rd-line-strong); background: var(--rd-btn-bg); color: #05181c; box-shadow: var(--rd-btn-shadow); }
+.push-btn:hover:not(:disabled) { background: var(--rd-btn-bg); filter: brightness(1.08); }
+.push-link { color: var(--text-dim); }
 `;

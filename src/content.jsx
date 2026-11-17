@@ -11,7 +11,7 @@ import { shareLink } from "./share.js";
 const CACHE_KEY = "tvr_content_cache_v1";
 const CACHE_FRESH_MS = 5 * 60 * 1000;
 const CACHE_STALE_OK_MS = 24 * 60 * 60 * 1000;
-const FETCH_TIMEOUT_MS = 8000;
+const FETCH_TIMEOUT_MS = 12000;
 const TOKEN_KEY = "tvr_vote_token";
 const voteKey = (pollId) => `tvr_poll_vote_${pollId}`;
 
@@ -68,14 +68,19 @@ function readCache() {
   try { const c = JSON.parse(lsGet(CACHE_KEY) || "null"); return c && c.t && c.data ? c : null; } catch (e) { return null; }
 }
 
+// "Song of the Day" changes at midnight: a cached answer is only treated as fresh within the same local calendar day,
+// so a phone that kept the app open (or cached it) overnight asks the server again instead of showing yesterday's song.
+function localDay(ts) { const d = new Date(ts); return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate(); }
+function cacheIsFresh(c) { return !!c && Date.now() - c.t < CACHE_FRESH_MS && localDay(c.t) === localDay(Date.now()); }
+
 export async function fetchContent(webhookUrl) {
   if (!webhookUrl || webhookUrl.includes("PASTE_")) return { song: null, poll: null };
   const cached = readCache();
-  if (cached && Date.now() - cached.t < CACHE_FRESH_MS) return { song: normalizeSong(cached.data.song), poll: normalizePoll(cached.data.poll) };
+  if (cacheIsFresh(cached)) return { song: normalizeSong(cached.data.song), poll: normalizePoll(cached.data.poll) };
   const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = ctrl ? setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS) : null;
   try {
-    const res = await fetch(`${webhookUrl}?action=content`, ctrl ? { signal: ctrl.signal } : undefined);
+    const res = await fetch(`${webhookUrl}?action=content&_=${Math.floor(Date.now() / CACHE_FRESH_MS)}`, ctrl ? { signal: ctrl.signal, cache: "no-store" } : { cache: "no-store" });
     if (!res.ok) throw new Error("content HTTP " + res.status);
     const data = await res.json();
     if (!data || data.ok !== true || !data.content) throw new Error("content malformed");
@@ -110,8 +115,20 @@ export function ContentProvider({ webhookUrl, onEvent, myVanSongs, onSaveSong, o
   const [state, setState] = useState({ song: null, poll: null });
   useEffect(() => {
     let cancelled = false;
-    fetchContent(webhookUrl).then((c) => { if (!cancelled) setState(c); }).catch(() => {});
-    return () => { cancelled = true; };
+    const load = () => fetchContent(webhookUrl).then((c) => { if (!cancelled) setState((prev) => (c.song || c.poll || (!prev.song && !prev.poll) ? c : prev)); }).catch(() => {});
+    load();
+    // An installed / long-lived app is not reloaded overnight: when it returns to the foreground,
+    // fetchContent() decides (5 min / new day) whether the cached answer is still good.
+    const onShow = () => { if (typeof document === "undefined" || document.visibilityState !== "hidden") load(); };
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("focus", onShow);
+    window.addEventListener("pageshow", onShow);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("focus", onShow);
+      window.removeEventListener("pageshow", onShow);
+    };
   }, [webhookUrl]);
   const value = useMemo(() => ({ ...state, webhookUrl, onEvent: onEvent || null, myVanSongs: myVanSongs || [], onSaveSong: onSaveSong || null, onSongPlay: onSongPlay || null }), [state, webhookUrl, onEvent, myVanSongs, onSaveSong, onSongPlay]);
   return <ContentContext.Provider value={value}>{children}</ContentContext.Provider>;

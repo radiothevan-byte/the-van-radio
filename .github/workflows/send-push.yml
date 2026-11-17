@@ -1,0 +1,38 @@
+# Every ~15 min: send the notifications that are due (Status = Approved in the Google Sheet "Push Outbox").
+# Needs repository secrets: PUSH_SENDER_SECRET, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY.
+# Note: GitHub may delay scheduled runs by several minutes, and pauses schedules after 60 days without repo activity.
+name: Send push notifications
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (count recipients, send nothing)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: send-push
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Send due notifications
+        run: node scripts/send-push.mjs
+        env:
+          PUSH_SENDER_SECRET: ${{ secrets.PUSH_SENDER_SECRET }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}

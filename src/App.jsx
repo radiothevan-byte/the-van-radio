@@ -20,6 +20,7 @@ import { renderPostcardImage } from "./postcardimage.js";
 import AtlasSheet from "./atlassheet.jsx";
 import { REDESIGN_CSS } from "./redesign.js";
 import { ContentProvider, SongOfTheDayCard, VanPollCard, SongPlayLink, CONTENT_CSS } from "./content.jsx";
+import { NotificationsBell, PUSH_CSS } from "./push.jsx";
 import { trackEvent, trackReturningVisit } from "./analytics.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
 
@@ -955,6 +956,7 @@ function TopActionBar({ liveOn, onToggleLive, onOpenCopilot }) {
       <button className={`top-action-btn live-btn ${liveOn ? "live-btn-active" : ""}`} onClick={onToggleLive}>
         <span className="live-dot" /> Live
       </button>
+      <NotificationsBell webhookUrl={ROUTE_SHEET_WEBHOOK_URL} />
     </div>
   );
 }
@@ -3296,7 +3298,7 @@ function TheVanAppInner() {
     <PromotionsProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} actions={promoActions}>
     <ContentProvider webhookUrl={ROUTE_SHEET_WEBHOOK_URL} onEvent={trackEvent} myVanSongs={myVanSongs} onSaveSong={handleSaveSong} onSongPlay={() => setIsPlaying(false)}>
     <div className="app-root">
-      <style>{CSS}{PROMO_CSS}{CONTENT_CSS}{REDESIGN_CSS}</style>
+      <style>{CSS}{PROMO_CSS}{CONTENT_CSS}{PUSH_CSS}{REDESIGN_CSS}</style>
       {tab !== "home" && <div className="rd-atmo" aria-hidden="true"><img src={HOME_HERO_WEBP} alt="" /></div>}
       <audio
         ref={audioRef}
