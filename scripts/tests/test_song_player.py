@@ -73,7 +73,7 @@ with sync_playwright() as p:
     check(hf()=="none" and pg.locator(".sp-save").get_attribute("aria-pressed")=="false","not saved: heart is EMPTY (outline only)")
     pg.locator(".sp-save").click(); pg.wait_for_timeout(200)
     check(hf()=="currentColor" and pg.locator(".sp-save").get_attribute("aria-pressed")=="true","saved: heart is FILLED with colour")
-    check("Αποθηκεύτηκε" in pg.locator(".sp-save").inner_text() and pg.locator(".sp-sheet").count()==1,"save to My Van: button shows saved, sheet stays open (no re-open loop)")
+    check("Αποθηκεύτηκε" in pg.locator(".sp-save").get_attribute("aria-label") and pg.locator(".sp-sheet").count()==1,"save to My Van: button shows saved, sheet stays open (no re-open loop)")
     saved=pg.evaluate("JSON.parse(localStorage.getItem('tvr_my_van_songs')||'[]')")
     check(len(saved)==1 and saved[0]["id"]=="sotd:sotd-test" and saved[0]["musicUrl"]==YT,"song stored in My Van with its link: %s"%saved)
     check(pg.locator(".sp-open").get_attribute("href")=="https://www.youtube.com/watch?v=AaG9nV9gzdU","'Open in YouTube' link is clean")
@@ -82,7 +82,7 @@ with sync_playwright() as p:
     check(pg.locator(".sp-sheet").count()==0 and pg.evaluate("window.__yt.destroyed")==1,"close removes the sheet and destroys the player (audio stops)")
     check(pg.evaluate("document.body.style.overflow")!="hidden","scroll restored")
     # reopen then Esc and backdrop
-    pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); check("Αποθηκεύτηκε" in pg.locator(".sp-save").inner_text(),"reopened: already-saved state remembered")
+    pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); check("Αποθηκεύτηκε" in pg.locator(".sp-save").get_attribute("aria-label"),"reopened: already-saved state remembered")
     pg.keyboard.press("Escape"); pg.wait_for_timeout(200); check(pg.locator(".sp-sheet").count()==0,"Escape closes")
     pg.locator(".content-song").click(); pg.wait_for_selector(".sp-sheet"); pg.mouse.click(190,800); pg.wait_for_timeout(200); check(pg.locator(".sp-sheet").count()==0,"tap on the dark backdrop closes")
     # unsave
@@ -92,7 +92,7 @@ with sync_playwright() as p:
     # 3) EN labels
     ctx,pg=new(song("https://youtu.be/AaG9nV9gzdU")); pg.add_init_script("try{localStorage.setItem('tvr_lang','en')}catch(e){}"); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song")
     check("Play" in pg.locator(".content-cta").inner_text(),"EN: card says Play"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.wait_for_timeout(500)
-    check("Save to My Van" in pg.locator(".sp-save").inner_text() and pg.evaluate("window.__yt.opts.videoId")=="AaG9nV9gzdU","EN: labels + youtu.be link parsed"); ctx.close()
+    check("Save to My Van" in pg.locator(".sp-save").get_attribute("aria-label") and pg.evaluate("window.__yt.opts.videoId")=="AaG9nV9gzdU","EN: labels + youtu.be link parsed"); ctx.close()
     # 4) embed not allowed (error 150) -> message + open link, no crash
     ctx,pg=new(song(YT),mode="error150"); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.wait_for_timeout(300); pg.locator(".sp-play").click(); pg.wait_for_timeout(300)
     check("δεν παίζει εδώ" in pg.locator(".sp-hint").inner_text() and pg.locator(".sp-open").count()==1,"embed disabled by owner: friendly message + open-in-YouTube link"); ctx.close()
@@ -124,7 +124,7 @@ with sync_playwright() as p:
     # 10) Share button
     SH_STUB="window.__shared=[];navigator.share=function(d){window.__shared.push(d);return window.__shareMode==='abort'?Promise.reject(Object.assign(new Error('x'),{name:'AbortError'})):Promise.resolve();};"
     ctx,pg=new(song(YT)); pg.add_init_script(SH_STUB); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet")
-    check(pg.locator(".sp-share").count()==1 and "Κοινοποίηση" in pg.locator(".sp-share").inner_text(),"share button present (Κοινοποίηση)")
+    check(pg.locator(".sp-share").count()==1 and "Κοινοποίηση" in pg.locator(".sp-share").get_attribute("aria-label") and pg.locator(".sp-share svg").count()==1,"share icon button present (Κοινοποίηση)")
     pg.locator(".sp-share").click(); pg.wait_for_timeout(300)
     sh=pg.evaluate("window.__shared")
     check(len(sh)==1 and sh[0]["url"]=="https://www.youtube.com/watch?v=AaG9nV9gzdU" and "Πυρ Γυνή και Θάλασσα" in sh[0]["text"] and "Νεφέλη Φασούλη" in sh[0]["text"] and "The Van" in sh[0]["text"],"native share gets clean song link + title/artist/The Van text: %s"%sh)
@@ -133,12 +133,12 @@ with sync_playwright() as p:
     check("αντιγράφηκε" not in pg.locator(".sp-share").inner_text() and not pg.errs,"closing the share sheet = silent, no 'copied' message, no errors"); ctx.close()
     ctx,pg=new(song(YT)); pg.add_init_script("Object.defineProperty(navigator,'share',{value:undefined,configurable:true});window.__clip=[];Object.defineProperty(navigator,'clipboard',{value:{writeText:function(t){window.__clip.push(t);return Promise.resolve();}},configurable:true});")
     pg.goto(BASE+"/"); pg.wait_for_selector(".content-song"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.locator(".sp-share").click(); pg.wait_for_timeout(300)
-    check(pg.evaluate("window.__clip")==["https://www.youtube.com/watch?v=AaG9nV9gzdU"] and "αντιγράφηκε" in pg.locator(".sp-share").inner_text(),"no share sheet: link copied + confirmation shown"); pg.wait_for_timeout(2400)
-    check("Κοινοποίηση" in pg.locator(".sp-share").inner_text(),"confirmation fades back to the label"); ctx.close()
+    check(pg.evaluate("window.__clip")==["https://www.youtube.com/watch?v=AaG9nV9gzdU"] and "αντιγράφηκε" in pg.locator(".sp-copied").inner_text(),"no share sheet: link copied + confirmation shown"); pg.wait_for_timeout(2400)
+    check(pg.locator(".sp-copied").count()==0,"confirmation fades away"); ctx.close()
     ctx,pg=new(song("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC?si=abc")); pg.add_init_script(SH_STUB); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.locator(".sp-share").click(); pg.wait_for_timeout(300)
     check(pg.evaluate("window.__shared")[0]["url"].startswith("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"),"Spotify song shares the Spotify link"); ctx.close()
     ctx,pg=new(song(YT)); pg.add_init_script("try{localStorage.setItem('tvr_lang','en')}catch(e){}"+SH_STUB); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet")
-    check(pg.locator(".sp-share").inner_text().strip()=="Share","EN: label 'Share'"); pg.locator(".sp-share").click(); pg.wait_for_timeout(200)
+    check(pg.locator(".sp-share").get_attribute("aria-label")=="Share","EN: label 'Share'"); pg.locator(".sp-share").click(); pg.wait_for_timeout(200)
     check("Song of the Day from The Van" in pg.evaluate("window.__shared")[0]["text"],"EN: share text in English"); ctx.close()
     for w in (320,390):
         ctx,pg=new(song(YT,title="Ένας πολύ μεγάλος τίτλος τραγουδιού που πιάνει δύο γραμμές"),w); pg.goto(BASE+"/"); pg.wait_for_selector(".content-song"); pg.locator(".content-cta").click(); pg.wait_for_selector(".sp-sheet"); pg.wait_for_timeout(400)

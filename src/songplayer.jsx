@@ -318,12 +318,14 @@ export function SongPlayerSheet({ song, parsed, saved, onSave, onClose, onEvent,
 
         <div className="sp-actions">
           {onSave && (
-            <button type="button" className={`sp-save ${saved ? "sp-save-on" : ""}`} onClick={onSave} aria-pressed={saved}>
-              <HeartIcon filled={saved} /> <span>{saved ? t("content.song.saved") : t("content.song.save")}</span>
+            <button type="button" className={`sp-save ${saved ? "sp-save-on" : ""}`} onClick={onSave} aria-pressed={saved}
+              aria-label={saved ? t("content.song.saved") : t("content.song.save")} title={saved ? t("content.song.saved") : t("content.song.save")}>
+              <HeartIcon filled={saved} />
             </button>
           )}
-          <button type="button" className="sp-share" onClick={handleShare}>
-            <ShareIcon /> <span>{shareCopied ? t("share.copied") : t("content.song.share")}</span>
+          {shareCopied && <span className="sp-copied" role="status">{t("share.copied")}</span>}
+          <button type="button" className="sp-share" onClick={handleShare} aria-label={t("content.song.share")} title={t("content.song.share")}>
+            <ShareIcon />
           </button>
         </div>
         <a className="sp-open" href={link} target="_blank" rel="noopener noreferrer">
@@ -429,6 +431,8 @@ export const SONGPLAYER_CSS = `
 .sp-heart, .sp-shareicon { flex: none; color: #ffd23f; }
 .sp-save-on { border-color: rgba(255,210,63,0.85); background: rgba(255,210,63,0.1); color: #fff; }
 .sp-share { border-color: rgba(255,255,255,0.28); }
+.sp-save, .sp-share { width: 46px; height: 46px; padding: 0; gap: 0; }
+.sp-copied { align-self: center; font-size: 12.5px; color: rgba(255,255,255,0.72); }
 .sp-open { margin-top: 14px; font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,0.6); text-decoration: none; }
 .sp-identity { margin: 20px 0 0; padding: 16px 2px 0; border-top: 1px solid rgba(255,255,255,0.12); text-align: left; }
 .sp-identity-h { margin: 0 0 12px; font-family: 'Inter', -apple-system, sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: var(--accent, #2ed0f2); text-align: center; }

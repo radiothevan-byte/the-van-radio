@@ -41,8 +41,8 @@ with sync_playwright() as p:
     b = p.chromium.launch()
     for w in (390, 320):
         ctx, pg = open_card(b, [pc(1)], w=w)
-        btns = pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").all_inner_texts()
-        check(btns == ["Μοιράσου", "+ My Van"], f"{w}px actions: ONE share button + My Van %s" % btns)
+        btns = pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").evaluate_all("els=>els.map(e=>e.getAttribute('aria-label')||'')")
+        check(len(btns) == 2 and btns[0] == "Μοιράσου" and "My Van" in btns[1], f"{w}px actions: ONE share icon button + My Van heart %s" % btns)
         check(pg.evaluate("document.documentElement.scrollWidth-innerWidth") <= 0, f"{w}px no horizontal overflow")
         pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").nth(0).click(); pg.wait_for_timeout(900)
         c = pg.evaluate("window.__calls"); check(len(c) == 1 and len(c[0]["files"]) == 1, "the single share button shares the picture")
@@ -60,7 +60,7 @@ with sync_playwright() as p:
     ctx.close()
     # browser without file sharing -> same single button shares the plain link
     ctx, pg = open_card(b, [pc(1)], share=False)
-    check(pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").all_inner_texts() == ["Μοιράσου", "+ My Van"], "no file-share support -> still one share button")
+    check(pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").evaluate_all("els=>els.map(e=>e.getAttribute('aria-label')||'')")[0] == "Μοιράσου", "no file-share support -> still one share button")
     pg.evaluate("window.__calls=[];navigator.share=async(d)=>{window.__calls.push({url:d.url,files:d.files||[]})};0")
     pg.locator(".atlas-opened .atlas-postcard-actions .atlas-entry-save").nth(0).click(); pg.wait_for_timeout(400)
     c = pg.evaluate("window.__calls"); check(len(c) == 1 and c[0]["files"] == [] and c[0]["url"].endswith("/postcard/id-1"), "falls back to sharing the link")

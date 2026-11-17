@@ -89,7 +89,7 @@ with sync_playwright() as p:
         dims=ph.evaluate("e=>({nw:e.naturalWidth,nh:e.naturalHeight,w:e.offsetWidth,h:e.offsetHeight,fit:getComputedStyle(e).objectFit})")
         check(dims["fit"]=="contain" and abs(dims["w"]/dims["h"]-dims["nw"]/dims["nh"])<0.02,"opened photo shows whole image (natural aspect, not cropped): %s"%dims)
         pg.locator(".atlas-opened .atlas-entry-save").last.click(); pg.wait_for_timeout(300)
-        check("My Van" in pg.locator(".atlas-opened .atlas-entry-save").last.inner_text(), "save to My Van still works")
+        check("My Van" in pg.locator(".atlas-opened .atlas-entry-save").last.get_attribute("aria-label"), "save to My Van still works (heart icon button)")
         pg.locator(".atlas-back-btn").click(); pg.wait_for_timeout(300)
         check(pg.locator(".atlas-tile").count() == 3 and pg.locator(".atlas-opened").count() == 0, "back returns to the gallery")
         pg.locator(".atlas-view-toggle button").nth(0).click(); pg.wait_for_timeout(500)
