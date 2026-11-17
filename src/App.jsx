@@ -593,7 +593,7 @@ function FavoritesView({ journeys, favorites, currentId, isPlaying, onPlay, onFa
   );
 }
 
-function JourneyDetail({ journey, isCurrent, isPlaying, isFav, onPlay, onFav, onClose }) {
+function JourneyDetail({ journey, isCurrent, isPlaying, isFav, onPlay, onFav, onClose, progress = 0, duration = 0, onSeek, onSkip, onNext, onPrev }) {
   const { t } = useLang();
   const [shareNote, setShareNote] = useState("");
   async function handleShare() {
@@ -602,44 +602,77 @@ function JourneyDetail({ journey, isCurrent, isPlaying, isFav, onPlay, onFav, on
     if (r === "copied") { setShareNote(t("share.copied")); setTimeout(() => setShareNote(""), 2200); }
   }
   if (!journey) return null;
+  // The seek bar and transport controls drive the one real audio engine, so they are live only for the
+  // journey that is currently loaded; for any other journey the big play button loads and starts it.
+  const live = isCurrent && !!duration;
+  const pos = isCurrent ? progress : 0;
+  const pct = duration && isCurrent ? (progress / duration) * 100 : 0;
   return (
-    <div className="detail-overlay fade-in">
+    <div className="detail-overlay jp-overlay fade-in" role="dialog" aria-modal="true" aria-label={journey.title}>
       <div className="detail-hero-full">
         <div className="detail-hero-bg" style={{ backgroundImage: `url(${journey.imageUrl})` }} />
-        <img src={journey.imageUrl} alt="" className="detail-hero-img" />
         <div className="detail-hero-fade" />
-        <button className="detail-close" onClick={onClose} aria-label="close">
-          <X size={20} />
-        </button>
-        <div className="detail-body-bottom">
-          <div className="detail-top">
-            <div>
-              <div className="detail-title">{journey.title}</div>
-              <div className="detail-date">{journey.date}</div>
-            </div>
-            <div className="detail-actions">
-              <button className="icon-btn heart-btn detail-heart" onClick={handleShare} aria-label={t("share.button")} title={t("share.button")}>
-                <Share2 size={19} strokeWidth={2} />
-              </button>
-              <button
-                className={`icon-btn heart-btn detail-heart ${isFav ? "heart-active" : ""}`}
-                onClick={() => onFav(journey.id)}
-                aria-label="favorite"
-              >
-                <Heart size={19} strokeWidth={2} fill={isFav ? "currentColor" : "none"} />
-              </button>
-              <button className="play-btn-lg" onClick={() => onPlay(journey.id)} aria-label="play">
-                {isCurrent && isPlaying ? (
-                  <Pause size={22} fill="currentColor" />
-                ) : (
-                  <Play size={22} fill="currentColor" style={{ marginLeft: 2 }} />
-                )}
-              </button>
-            </div>
-          </div>
-          {shareNote && <div className="detail-share-note" role="status">{shareNote}</div>}
-          <p className="detail-description">{journey.description}</p>
+      </div>
+      <button className="detail-close" onClick={onClose} aria-label="close">
+        <X size={20} />
+      </button>
+      <div className="jp-scroll">
+        <div className="jp-art"><img src={journey.imageUrl} alt="" className="detail-hero-img jp-art-img" /></div>
+        <div className="jp-head">
+          <div className="detail-title">{journey.title}</div>
+          {journey.date ? <div className="detail-date">{journey.date}</div> : null}
         </div>
+        <div className="jp-seek">
+          <span className="jp-time">{formatTime(pos)}</span>
+          <input
+            className="mini-seek jp-seek-input"
+            type="range"
+            min={0}
+            max={duration || 0}
+            value={Math.min(pos, duration || 0)}
+            disabled={!live}
+            onChange={(e) => onSeek && onSeek(Number(e.target.value))}
+            aria-label="seek"
+            style={{ "--pct": `${pct}%` }}
+          />
+          <span className="jp-time">{isCurrent ? formatTime(duration) : "--:--"}</span>
+        </div>
+        <div className="jp-controls">
+          {isCurrent && (
+            <button className="icon-btn mini-skip" onClick={() => onSkip && onSkip(-10)} aria-label="rewind 10 seconds"><SkipTenIcon /></button>
+          )}
+          {isCurrent && (
+            <button className="icon-btn jp-step" onClick={onPrev} aria-label="previous"><SkipBack size={22} fill="currentColor" /></button>
+          )}
+          <button className="play-btn-lg" onClick={() => onPlay(journey.id)} aria-label="play">
+            {isCurrent && isPlaying ? (
+              <Pause size={26} fill="currentColor" />
+            ) : (
+              <Play size={26} fill="currentColor" style={{ marginLeft: 3 }} />
+            )}
+          </button>
+          {isCurrent && (
+            <button className="icon-btn jp-step" onClick={onNext} aria-label="next"><SkipForward size={22} fill="currentColor" /></button>
+          )}
+          {isCurrent && (
+            <button className="icon-btn mini-skip" onClick={() => onSkip && onSkip(10)} aria-label="forward 10 seconds"><SkipTenIcon forward /></button>
+          )}
+        </div>
+        <div className="jp-actions detail-actions">
+          <button className="icon-btn heart-btn detail-heart" onClick={handleShare} aria-label={t("share.button")} title={t("share.button")}>
+            <Share2 size={19} strokeWidth={2} />
+          </button>
+          <button
+            className={`icon-btn heart-btn detail-heart ${isFav ? "heart-active" : ""}`}
+            onClick={() => onFav(journey.id)}
+            aria-label="favorite"
+            aria-pressed={isFav}
+          >
+            <Heart size={19} strokeWidth={2} fill={isFav ? "currentColor" : "none"} />
+          </button>
+        </div>
+        {shareNote && <div className="detail-share-note jp-note" role="status">{shareNote}</div>}
+        {journey.description ? <p className="detail-description jp-description">{journey.description}</p> : null}
       </div>
     </div>
   );
@@ -3350,6 +3383,12 @@ function TheVanAppInner() {
           onPlay={handlePlay}
           onFav={handleFav}
           onClose={() => setOpenId(null)}
+          progress={progress}
+          duration={duration}
+          onSeek={handleSeek}
+          onSkip={handleSkip}
+          onNext={handleNext}
+          onPrev={handlePrev}
         />
       )}
       <MiniPlayer

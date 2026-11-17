@@ -145,11 +145,6 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
     linear-gradient(to top, var(--bg) 0%, rgba(7, 25, 29, 0.85) 22%, rgba(7, 25, 29, 0) 58%),
     linear-gradient(to bottom, rgba(7, 25, 29, 0.6) 0%, rgba(7, 25, 29, 0) 28%);
 }
-.hub-hero-title::after {
-  content: ""; display: block; width: min(150px, 46%); height: 9px; margin-top: 9px;
-  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 10' preserveAspectRatio='none'><path d='M3 6 C 30 2, 60 8, 95 4 S 140 5, 157 3' fill='none' stroke='%2336C4D9' stroke-width='3.6' stroke-linecap='round'/></svg>") center / 100% 100% no-repeat;
-  filter: drop-shadow(0 0 6px rgba(54, 196, 217, 0.55));
-}
 .hub-hero-sub { color: #8fc7d4; }
 .hub-card { background-color: #0a272e; border-radius: 20px; border: 1px solid var(--rd-line); transition: transform var(--rd-t) var(--rd-ease), box-shadow var(--rd-t); }
 .hub-card:hover { box-shadow: var(--rd-shadow), var(--rd-glow); }
@@ -395,4 +390,34 @@ button:focus-visible, a:focus-visible, [role="tab"]:focus-visible, input[type="r
 .push-btn { border-color: var(--rd-line-strong); background: var(--rd-btn-bg); color: #05181c; box-shadow: var(--rd-btn-shadow); }
 .push-btn:hover:not(:disabled) { background: var(--rd-btn-bg); filter: brightness(1.08); }
 .push-link { color: var(--text-dim); }
+
+/* ---- Journey player (opens when a journey is tapped) ---- */
+.jp-overlay { overflow: hidden; }
+.jp-scroll {
+  position: relative; z-index: 1; height: 100%; box-sizing: border-box; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: calc(58px + env(safe-area-inset-top, 0px)) 22px calc(26px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.jp-overlay .detail-close { z-index: 3; }
+.jp-art {
+  flex: none; width: min(62vw, 250px); aspect-ratio: 1 / 1; border-radius: 26px; overflow: hidden;
+  border: 1px solid var(--rd-line-strong); background: var(--surface);
+  box-shadow: 0 22px 46px -16px rgba(0, 0, 0, 0.85), 0 0 40px -10px rgba(54, 196, 217, 0.55);
+}
+.jp-art-img { position: static; display: block; width: 100%; height: 100%; object-fit: cover; }
+.jp-scroll > :first-child { margin-top: auto; }
+.jp-scroll > :last-child { margin-bottom: auto; }
+.jp-head { text-align: center; max-width: 100%; }
+.jp-head .detail-title { font-size: 23px; overflow-wrap: anywhere; }
+.jp-seek { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 420px; }
+.jp-seek .mini-seek { flex: 1; width: auto; min-width: 0; margin: 0; }
+.jp-seek .mini-seek:disabled { opacity: 0.45; }
+.jp-time { flex: none; min-width: 40px; font-size: 12px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; text-align: center; }
+.jp-controls { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.jp-controls .play-btn-lg { flex: none; }
+.jp-step { width: 44px; height: 44px; color: var(--text); }
+.jp-controls .mini-skip { width: 40px; height: 40px; color: var(--text-dim); }
+.jp-actions { justify-content: center; }
+.jp-note { text-align: center; margin: 0; }
+.jp-description { width: 100%; max-width: 420px; margin: 8px 0 0; text-align: left; font-size: 14px; line-height: 1.7; overflow: visible; }
 `;

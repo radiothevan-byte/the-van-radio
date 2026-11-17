@@ -1,5 +1,5 @@
 import json, time
-src = open('/home/claude/the-van-radio2/scripts/tests/test_postcards_redesign.py').read().split("with sync_playwright()")[0]
+src = open('/home/claude/the-van-radio/scripts/tests/test_postcards_redesign.py').read().split("with sync_playwright()")[0]
 exec(src)
 from playwright.sync_api import sync_playwright
 A={"id":"a","title":"Μπαϊ Μπαϊ","artist":"Νεφέλη Φασούλη","link":"https://www.youtube.com/watch?v=42hbZ1lK6Gg","noteEl":"x","noteEn":"x"}

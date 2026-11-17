@@ -3,6 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+    <script>
+      /* Phones: lay the app out ~10% "zoomed out" (everything looked oversized). The layout width is the screen
+         width / TUNE, capped at the app's 460px column; tablets, desktops and landscape keep the normal viewport. */
+      (function () {
+        var TUNE = 0.9, FULL = "width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no";
+        function apply() {
+          try {
+            var m = document.querySelector('meta[name="viewport"]');
+            if (!m) return;
+            var sw = window.screen && window.screen.width, sh = window.screen && window.screen.height;
+            var portraitPhone = sw && sh && sw < 600 && sw <= sh;
+            m.setAttribute("content", portraitPhone ? "width=" + Math.min(Math.round(sw / TUNE), 460) + ", user-scalable=no" : FULL);
+          } catch (e) {}
+        }
+        apply();
+        window.addEventListener("orientationchange", function () { setTimeout(apply, 60); });
+      })();
+    </script>
     <title>The Van Radio</title>
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
