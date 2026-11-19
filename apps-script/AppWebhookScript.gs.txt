@@ -1738,8 +1738,8 @@ function handleContentDraft(data) {
 //       - Topic "shows": created automatically every Saturday (Status Approved, Send At = show start - lead).
 //                        Set PUSH_AUTO_SHOWS = false to turn that off. Cancel one by setting its row to Cancelled.
 //       - Topic "news":  created automatically (Status Approved) when a Song of the Day is published today,
-//                        a Van Poll starts today (PUSH_AUTO_NEWS) or a NEW row appears in the Journey sheet
-//                        (PUSH_AUTO_JOURNEYS). You can still add any extra row by hand.
+//                        a Van Poll starts today (PUSH_AUTO_NEWS) or a Journey goes live
+//                        (a new Journey row is stamped "Publish Date" = tomorrow; PUSH_AUTO_JOURNEYS). You can still add any extra row by hand.
 //   * The actual sending (encryption + delivery) is done by the GitHub Action "Send push notifications"
 //     (scripts/send-push.mjs, every ~15 min). It asks this script for what is due with form_type "push_due",
 //     authenticated with the Script Property PUSH_SENDER_SECRET, and reports back with "push_report".
@@ -1765,6 +1765,7 @@ var PUSH_SHOW_LEAD_MIN = 0;        // minutes BEFORE the show start; 0 = at show
 var PUSH_SHOW_GRACE_MIN = 30;      // never create a "starting now" notice more than this late
 var PUSH_AUTO_JOURNEYS = true;     // notify when a new row appears in the Journey sheet
 var PUSH_JOURNEY_SHEET = "Journey";
+var PUSH_JOURNEY_DATE_COL = "Publish Date";   // column in the Journey sheet (created automatically)
 var PUSH_JOURNEY_SEEN_KEY = "PUSH_JOURNEYS_SEEN";
 var PUSH_JOURNEY_SEEN_MAX = 600;   // Script Properties values are limited to ~9KB
 var PUSH_HOSTS = [
@@ -1929,32 +1930,45 @@ function pushCollectNews_(ss) {
     } catch (e) { console.error("pushCollectNews_ shows: " + e); }
   }
 
-  // New Journey. The first run only records what already exists (no flood of old Journeys).
+  // New Journeys go live the NEXT day. The Journey sheet gets a "Publish Date" column (the app hides a row until that
+  // date). A new row (title + audio) without a Publish Date is stamped with tomorrow; the notification goes out on the
+  // Publish Date. You can type any date yourself (earlier = live sooner). Rows that existed before the first run stay
+  // live and are never notified (baseline). Everything is idempotent (seen-set + Ref).
   if (PUSH_AUTO_JOURNEYS) {
     try {
       var jsheet = ss.getSheetByName(PUSH_JOURNEY_SHEET);
       if (jsheet && jsheet.getLastRow() > 1) {
-        var jidx = contentHeaderIndex_(jsheet);
-        var tCol = jidx["Title"] != null ? jidx["Title"] : 0, aCol = jidx["Audio URL"] != null ? jidx["Audio URL"] : 3;
+        var jhead = jsheet.getRange(1, 1, 1, jsheet.getLastColumn()).getValues()[0].map(function (h) { return String(h).trim(); });
+        var pdCol = jhead.indexOf(PUSH_JOURNEY_DATE_COL);
+        if (pdCol < 0) { pdCol = jhead.length; jsheet.getRange(1, pdCol + 1).setValue(PUSH_JOURNEY_DATE_COL); }
+        var tCol = jhead.indexOf("Title"); if (tCol < 0) tCol = 0;
+        var aCol = jhead.indexOf("Audio URL"); if (aCol < 0) aCol = 3;
         var props = PropertiesService.getScriptProperties();
         var raw = props.getProperty(PUSH_JOURNEY_SEEN_KEY);
         var baseline = raw == null || raw === "";
         var seen = [];
         try { seen = baseline ? [] : JSON.parse(raw); } catch (e) { seen = []; baseline = true; }
         var seenMap = {}; seen.forEach(function (h) { seenMap[h] = true; });
-        var fresh = [];
-        jsheet.getRange(2, 1, jsheet.getLastRow() - 1, jsheet.getLastColumn()).getValues().forEach(function (r) {
+        var tomorrow = contentAddDays_(today, 1), changed = baseline;
+        var width = Math.max(jsheet.getLastColumn(), pdCol + 1);
+        var jrows = jsheet.getRange(2, 1, jsheet.getLastRow() - 1, width).getValues();
+        var stamped = 0;
+        jrows.forEach(function (r, k) {
           var title = contentClean_(r[tCol], 80), audio = String(r[aCol] || "").trim();
           if (!title || !audio) return;                    // the app only shows rows with a title and audio
           var h = pushHash_(title + "|" + audio);
-          if (seenMap[h]) return;
-          seenMap[h] = true; seen.push(h);
-          fresh.push({ h: h, title: title });
+          var pd = contentDay_(r[pdCol]);
+          if (!seenMap[h]) {
+            seenMap[h] = true; seen.push(h); changed = true;
+            if (!baseline && !pd && stamped < 3) {          // brand-new row: schedule it for tomorrow (max 3 per run)
+              pd = tomorrow; stamped++;
+              var cell = jsheet.getRange(k + 2, pdCol + 1);
+              cell.setNumberFormat("yyyy-mm-dd"); cell.setValue(tomorrow);
+            }
+          }
+          if (pd && pd.getTime() === today.getTime()) add("journey:" + h, "Νέο Journey", "New Journey", title, title);
         });
-        if (!baseline) fresh.slice(0, 3).forEach(function (j) {   // at most 3 per run, never a flood
-          add("journey:" + j.h, "Νέο Journey", "New Journey", j.title, j.title);
-        });
-        if (fresh.length || baseline) props.setProperty(PUSH_JOURNEY_SEEN_KEY, JSON.stringify(seen.slice(-PUSH_JOURNEY_SEEN_MAX)));
+        if (changed) props.setProperty(PUSH_JOURNEY_SEEN_KEY, JSON.stringify(seen.slice(-PUSH_JOURNEY_SEEN_MAX)));
       }
     } catch (e) { console.error("pushCollectNews_ journeys: " + e); }
   }

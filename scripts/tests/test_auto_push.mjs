@@ -7,7 +7,13 @@ function sheet(rows) {  // rows[0] = header
   return {
     rows,
     getLastRow: () => rows.length, getLastColumn: () => (rows[0] || []).length,
-    getRange(r, c, nr, nc) { return { getValues: () => rows.slice(r - 1, r - 1 + (nr || 1)).map((x) => x.slice(c - 1, c - 1 + (nc || x.length))) }; },
+    getRange(r, c, nr, nc) {
+      return {
+        getValues: () => rows.slice(r - 1, r - 1 + (nr || 1)).map((x) => { const o = []; for (let k = c - 1; k < c - 1 + (nc || x.length); k++) o.push(x[k] === undefined ? "" : x[k]); return o; }),
+        setValue: (v) => { while (rows[r - 1].length < c) rows[r - 1].push(""); rows[r - 1][c - 1] = v; },
+        setNumberFormat() {},
+      };
+    },
     appendRow(x) { rows.push(x); },
   };
 }
@@ -62,32 +68,67 @@ ok("Lead time works (30 min before)", () => {
   assert.equal(new Date(r[7]).getTime(), SAT(17, 30).getTime()); assert.equal(r[2], "Η εκπομπή ξεκινά σύντομα");
 });
 
-ok("Journey: first run = baseline, no notifications, seen saved", () => {
-  const { out, props } = run({ now: FRI, journeys: J("A", "B") });
+const DAY = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+const PD = (rows) => rows[0].indexOf("Publish Date");
+ok("Journey: first run = baseline: column created, nothing stamped, nothing notified", () => {
+  const rows = J("A", "B");
+  const { out, props } = run({ now: FRI, journeys: rows });
   assert.equal(out.length, 0); assert.equal(JSON.parse(props.PUSH_JOURNEYS_SEEN).length, 2);
+  assert.equal(PD(rows), 5); assert.ok(rows.slice(1).every((r) => !r[5]), "existing journeys stay live (no date)");
 });
-ok("Journey: new row after baseline -> one news notification, then none again", () => {
-  const b = run({ now: FRI, journeys: J("A", "B") });
-  const r1 = run({ now: FRI, journeys: J("A", "B", "C"), props: b.props });
-  assert.equal(r1.out.length, 1);
-  assert.equal(r1.out[0][1], "news"); assert.equal(r1.out[0][2], "Νέο Journey"); assert.equal(r1.out[0][4], "C"); assert.equal(r1.out[0][8], "Approved");
-  const r2 = run({ now: FRI, journeys: J("A", "B", "C"), props: r1.props, outbox: r1.out });
-  assert.equal(r2.out.length, 1);
-});
-ok("Journey: row without audio is ignored until audio is added", () => {
-  const b = run({ now: FRI, journeys: J("A") });
-  const rows = J("A", "B"); rows[2][3] = "";
+ok("Journey: new row after baseline is stamped with TOMORROW, no notification yet", () => {
+  const rows = J("A", "B");
+  const b = run({ now: FRI, journeys: rows });
+  rows.push(["C", "2026-11-20", "", "https://a/C.mp3", ""]);
   const r1 = run({ now: FRI, journeys: rows, props: b.props });
   assert.equal(r1.out.length, 0);
+  assert.equal(DAY(rows[3][5]), "2026-11-21");
+  assert.ok(!rows[1][5] && !rows[2][5]);
+});
+ok("Journey: next day it is due -> ONE news notification (once only)", () => {
+  const rows = J("A"); const b = run({ now: FRI, journeys: rows });
+  rows.push(["C", "", "", "https://a/C.mp3", ""]);
+  const r1 = run({ now: FRI, journeys: rows, props: b.props });
+  const sat9 = SAT(9);
+  const r2 = run({ now: sat9, journeys: rows, props: r1.props });
+  const j = r2.out.filter((r) => r[10].startsWith("journey:"));
+  assert.equal(j.length, 1); assert.equal(j[0][1], "news"); assert.equal(j[0][2], "Νέο Journey"); assert.equal(j[0][4], "C"); assert.equal(j[0][8], "Approved");
+  assert.equal(new Date(j[0][7]).getTime(), SAT(10).getTime());          // goes out at 10:00
+  const r3 = run({ now: SAT(11), journeys: rows, props: r2.props, outbox: r2.out });
+  assert.equal(r3.out.filter((r) => r[10].startsWith("journey:")).length, 1);
+});
+ok("Journey: manual Publish Date = today is respected and notified", () => {
+  const rows = J("A"); const b = run({ now: FRI, journeys: rows });
+  rows.push(["Z", "", "", "https://a/Z.mp3", "", new Date(2026, 10, 20)]);
+  const r = run({ now: FRI, journeys: rows, props: b.props });
+  assert.equal(r.out.filter((x) => x[10].startsWith("journey:")).length, 1);
+});
+ok("Journey: manual FUTURE Publish Date is left alone (not overwritten, not notified)", () => {
+  const rows = J("A"); const b = run({ now: FRI, journeys: rows });
+  const future = new Date(2026, 11, 5);
+  rows.push(["F", "", "", "https://a/F.mp3", "", future]);
+  const r = run({ now: FRI, journeys: rows, props: b.props });
+  assert.equal(r.out.length, 0); assert.equal(rows[2][5], future);
+});
+ok("Journey: row without audio is ignored until audio is added", () => {
+  const rows = J("A"); const b = run({ now: FRI, journeys: rows });
+  rows.push(["B", "", "", "", ""]);
+  const r1 = run({ now: FRI, journeys: rows, props: b.props });
+  assert.ok(!rows[2][5], "not stamped yet");
   rows[2][3] = "https://a/B.mp3";
-  assert.equal(run({ now: FRI, journeys: rows, props: r1.props }).out.length, 1);
+  run({ now: FRI, journeys: rows, props: r1.props });
+  assert.equal(DAY(rows[2][5]), "2026-11-21");
 });
-ok("Journey: at most 3 per run", () => {
-  const b = run({ now: FRI, journeys: J("A") });
-  assert.equal(run({ now: FRI, journeys: J("A", "B", "C", "D", "E"), props: b.props }).out.length, 3);
+ok("Journey: at most 3 stamped per run", () => {
+  const rows = J("A"); const b = run({ now: FRI, journeys: rows });
+  ["B", "C", "D", "E"].forEach((t) => rows.push([t, "", "", "https://a/" + t, ""]));
+  run({ now: FRI, journeys: rows, props: b.props });
+  assert.equal(rows.slice(2).filter((r) => r[5]).length, 3);
 });
-ok("Journey: corrupt property -> safe re-baseline, no flood", () => {
-  assert.equal(run({ now: FRI, journeys: J("A", "B"), props: { PUSH_JOURNEYS_SEEN: "{oops" } }).out.length, 0);
+ok("Journey: corrupt property -> safe re-baseline, nothing stamped", () => {
+  const rows = J("A", "B");
+  assert.equal(run({ now: FRI, journeys: rows, props: { PUSH_JOURNEYS_SEEN: "{oops" } }).out.length, 0);
+  assert.ok(rows.slice(1).every((r) => !r[5]));
 });
 ok("Journey: missing sheet doesn't break song/poll", () => {
   const song = [["ID", "Title", "Artist", "Status", "Publish Date"], ["s1", "Hello", "Adele", "Published", new Date(2026, 10, 20)]];
