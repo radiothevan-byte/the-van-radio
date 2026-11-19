@@ -20,6 +20,7 @@ import { renderPostcardImage } from "./postcardimage.js";
 import AtlasSheet from "./atlassheet.jsx";
 import { REDESIGN_CSS } from "./redesign.js";
 import { ContentProvider, SongOfTheDayCard, VanPollCard, SongPlayLink, CONTENT_CSS } from "./content.jsx";
+import { athensToday, journeyIsLive } from "./journeyschedule.js";
 import { NotificationsBell, PUSH_CSS } from "./push.jsx";
 import { trackEvent, trackReturningVisit } from "./analytics.js";
 import { PromotionsProvider, PromotionSlot, PROMO_CSS } from "./promotions.jsx";
@@ -101,7 +102,7 @@ function parseCSV(text) {
 }
 
 async function fetchJourneysFromSheet() {
-  const res = await fetch(SHEET_CSV_URL);
+  const res = await fetch(SHEET_CSV_URL, { cache: "no-store" });
   if (!res.ok) throw new Error(`Sheet fetch failed: ${res.status}`);
   const text = await res.text();
   const rows = parseCSV(text);
@@ -112,7 +113,9 @@ async function fetchJourneysFromSheet() {
     description: header.findIndex((h) => h.trim().toLowerCase() === "description"),
     audio: header.findIndex((h) => h.trim().toLowerCase() === "audio url"),
     image: header.findIndex((h) => h.trim().toLowerCase() === "image url"),
+    publish: header.findIndex((h) => h.trim().toLowerCase() === "publish date"),
   };
+  const today = athensToday();
   return body
     .map((r, i) => {
       const title = (r[idx.title] || "").trim();
@@ -124,9 +127,10 @@ async function fetchJourneysFromSheet() {
         description: (r[idx.description] || "").trim(),
         audioUrl: (r[idx.audio] || "").trim(),
         imageUrl: (r[idx.image] || "").trim(),
+        live: idx.publish < 0 ? true : journeyIsLive(r[idx.publish], today),
       };
     })
-    .filter((j) => j.title && j.audioUrl)
+    .filter((j) => j.title && j.audioUrl && j.live)
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
@@ -3179,18 +3183,25 @@ function TheVanAppInner() {
   const [copilotOpen, setCopilotOpen] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    fetchJourneysFromSheet()
-      .then((data) => {
-        if (!cancelled && data.length) setJourneys(data);
-      })
-      .catch((err) => {
-        console.error("Could not load live episode list, using fallback:", err);
-      })
-      .finally(() => {
-        if (!cancelled) setJourneysLoading(false);
-      });
-    return () => { cancelled = true; };
+    let cancelled = false, last = 0;
+    const load = () => {
+      last = Date.now();
+      return fetchJourneysFromSheet()
+        .then((data) => {
+          if (!cancelled && data.length) setJourneys(data);
+        })
+        .catch((err) => {
+          console.error("Could not load live episode list, using fallback:", err);
+        })
+        .finally(() => {
+          if (!cancelled) setJourneysLoading(false);
+        });
+    };
+    load();
+    // A long-lived app (home-screen PWA): pick up Journeys that went live since it was opened.
+    const onVisible = () => { if (document.visibilityState === "visible" && Date.now() - last > 10 * 60 * 1000) load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { cancelled = true; document.removeEventListener("visibilitychange", onVisible); };
   }, []);
 
   useEffect(() => { trackReturningVisit(); }, []);
