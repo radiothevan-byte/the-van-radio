@@ -19,8 +19,8 @@ const SUBJECT = process.env.VAPID_SUBJECT || "mailto:radiothevan@gmail.com";
 const DRY = process.env.DRY_RUN === "1";
 
 
-async function call(body) {
-  const res = await fetch(WEBHOOK, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ ...body, key: SECRET }), redirect: "follow" });
+async function call(body, { webhook = WEBHOOK, secret = SECRET } = {}) {
+  const res = await fetch(webhook, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ ...body, key: secret }), redirect: "follow" });
   const text = await res.text();
   try { return JSON.parse(text); } catch { throw new Error("Apps Script returned non-JSON: " + text.slice(0, 120)); }
 }
@@ -37,14 +37,16 @@ export function buildPayload(n, lang) {
   return JSON.stringify({ title: title.slice(0, 80), body: body.slice(0, 160), url: safeUrl(n.url), tag: n.id, topic: n.topic });
 }
 
-async function main() {
-  if (!SECRET || !PUB || !PRIV) throw new Error("Missing PUSH_SENDER_SECRET / VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY");
-  const due = await call({ form_type: "push_due", dry_run: DRY });
+// One sending pass. Used by the GitHub Action (main below) AND by the Vercel endpoint /api/push-tick.
+export async function runPush({ secret = SECRET, pub = PUB, priv = PRIV, subject = SUBJECT, webhook = WEBHOOK, dry = DRY, log = console.log } = {}) {
+  if (!secret || !pub || !priv) throw new Error("Missing PUSH_SENDER_SECRET / VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY");
+  const due = await call({ form_type: "push_due", dry_run: dry }, { webhook, secret });
   if (!due || !due.ok) throw new Error("push_due failed: " + JSON.stringify(due));
   const notes = due.notifications || [];
   const subs = due.subscriptions || [];
-  console.log(`due notifications: ${notes.length}, active subscriptions: ${subs.length}`);
-  if (!notes.length) return;
+  log(`due notifications: ${notes.length}, active subscriptions: ${subs.length}`);
+  const summary = { due: notes.length, subscriptions: subs.length, sent: [], expired: 0 };
+  if (!notes.length) return summary;
 
   const sent = [], expired = new Set();
   for (const n of notes) {
@@ -54,23 +56,27 @@ async function main() {
     const worker = async () => {
       while (queue.length) {
         const s = queue.shift();
-        if (DRY) { ok++; continue; }
+        if (dry) { ok++; continue; }
         try {
           const r = await sendWebPush({ endpoint: s.endpoint, p256dh: s.p256dh, auth: s.auth }, buildPayload(n, s.lang),
-            { subject: SUBJECT, publicKey: PUB, privateKey: PRIV, ttl: n.topic === "shows" ? 3600 : 6 * 3600, topic: undefined });
+            { subject, publicKey: pub, privateKey: priv, ttl: n.topic === "shows" ? 3600 : 6 * 3600, topic: undefined });
           if (r.ok) ok++; else { fail++; if (r.gone) expired.add(s.endpoint); }
         } catch (e) { fail++; }
       }
     };
     await Promise.all(Array.from({ length: Math.min(8, targets.length) || 0 }, worker));
-    console.log(`${n.id} [${n.topic}] -> ${ok} sent, ${fail} failed (of ${targets.length})`);
+    log(`${n.id} [${n.topic}] -> ${ok} sent, ${fail} failed (of ${targets.length})`);
     sent.push({ id: n.id, recipients: ok, failed: fail });
   }
-  if (DRY) { console.log("DRY_RUN: nothing reported back"); return; }
-  const rep = await call({ form_type: "push_report", sent, expired: Array.from(expired) });
+  summary.sent = sent; summary.expired = expired.size;
+  if (dry) { log("DRY_RUN: nothing reported back"); return summary; }
+  const rep = await call({ form_type: "push_report", sent, expired: Array.from(expired) }, { webhook, secret });
   if (!rep || !rep.ok) throw new Error("push_report failed: " + JSON.stringify(rep));
-  console.log(`reported: ${sent.length} notification(s), ${expired.size} expired subscription(s)`);
+  log(`reported: ${sent.length} notification(s), ${expired.size} expired subscription(s)`);
+  return summary;
 }
+
+async function main() { await runPush(); }
 
 import { fileURLToPath } from "node:url";
 if (process.argv[1] === fileURLToPath(import.meta.url)) main().catch((e) => { console.error(e.message); process.exit(1); });
